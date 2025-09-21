@@ -1,0 +1,15 @@
+flask
+flask-sqlalchemy
+flask-migrate
+python-dotenv
+PyMySQL
+marshmallow
+marshmallow-sqlalchemy
+transformers
+sentencepiece
+tensorflow
+keras-vggface
+keras-applications
+opencv-python
+cryptography
+flask-cors

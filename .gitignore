@@ -1,0 +1,10 @@
+.venv
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+.env
+.env.*
+.vscode/
+instance/
+*.sqlite

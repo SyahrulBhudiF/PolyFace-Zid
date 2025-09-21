@@ -1,0 +1,17 @@
+services:
+  db:
+    image: mysql
+    container_name: ocean_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ocean_db
+      MYSQL_USER: ocean_user
+      MYSQL_PASSWORD: ocean_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
