@@ -12,7 +12,7 @@ class PolyFaceBase(nn.Module):
 
     def preprocess(self, x):
         """Normalize input to [-1.6, 1.6] range"""
-        return x * self.scale + self.shift
+        return x * self.scale.to(x.device) + self.shift.to(x.device)
 
 def create_model_polyface1(feature_dim=256, input_shape=(112, 112, 3)):
     """Shallow version (apolynet_stodepth)"""

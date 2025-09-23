@@ -140,6 +140,77 @@ class BlockA(nn.Module):
         self.relu = nn.ReLU(inplace = True)
 
     def forward(self, x):
+        # PERBAIKAN: PINDAHKAN TENSOR KE DEVICE YANG SAMA DENGAN X
+        a = torch.equal(self.m.sample().to(x.device), torch.ones(1, device=x.device))
+        identity = x.clone()
+        if self.training:
+            if a:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                if self.use_checkpoint:
+                    x0 = checkpoint(self.branch0, x)
+                    x1 = checkpoint(self.branch1, x)
+                    x2 = checkpoint(self.branch2, x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = checkpoint(self.stem, out)
+                else:
+                    x0 = self.branch0(x)
+                    x1 = self.branch1(x)
+                    x2 = self.branch2(x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = self.stem(out)
+                result = identity + 0.3*out
+            else:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                result = identity
+        else:
+            if self.use_checkpoint:
+                x0 = checkpoint(self.branch0, x)
+                x1 = checkpoint(self.branch1, x)
+                x2 = checkpoint(self.branch2, x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = checkpoint(self.stem, out)
+            else:
+                x0 = self.branch0(x)
+                x1 = self.branch1(x)
+                x2 = self.branch2(x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = self.stem(out)
+            if self.multFlag:
+                result = identity + 0.3 * out * self.prob
+            else:
+                retult = identity + 0.3 * out
+
+        result = self.relu(result)
+        return result
         a = torch.equal(self.m.sample(),torch.ones(1))
         identity = x.clone()
         if self.training:
@@ -278,6 +349,129 @@ class BlockB(nn.Module):
         self.relu = nn.ReLU(inplace = True)
 
     def forward(self, x):
+        a = torch.equal(self.m.sample().to(x.device), torch.ones(1, device=x.device))
+        identity = x.clone()
+        if self.training:
+            if a:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                if self.use_checkpoint:
+                    x0 = checkpoint(self.branch0, x)
+                    x1 = checkpoint(self.branch1, x)
+                    out = torch.cat((x0, x1), 1)
+                    out = checkpoint(self.stem, out)
+                else:
+                    x0 = self.branch0(x)
+                    x1 = self.branch1(x)
+                    out = torch.cat((x0, x1), 1)
+                    out = self.stem(out)
+                result = identity + 0.3 * out
+            else:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                result = identity
+        else:
+            if self.use_checkpoint:
+                x0 = checkpoint(self.branch0, x)
+                x1 = checkpoint(self.branch1, x)
+                out = torch.cat((x0, x1), 1)
+                out = checkpoint(self.stem, out)
+            else:
+                x0 = self.branch0(x)
+                x1 = self.branch1(x)
+                out = torch.cat((x0, x1), 1)
+                out = self.stem(out)
+            if self.multFlag:
+                result = identity + 0.3 * out * self.prob
+            else:
+                result = identity + 0.3 * out
+        result = self.relu(result)
+        return result
+        # PERBAIKAN: PINDAHKAN TENSOR KE DEVICE YANG SAMA DENGAN X
+        a = torch.equal(self.m.sample().to(x.device), torch.ones(1, device=x.device))
+        identity = x.clone()
+        if self.training:
+            if a:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                if self.use_checkpoint:
+                    x0 = checkpoint(self.branch0, x)
+                    x1 = checkpoint(self.branch1, x)
+                    x2 = checkpoint(self.branch2, x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = checkpoint(self.stem, out)
+                else:
+                    x0 = self.branch0(x)
+                    x1 = self.branch1(x)
+                    x2 = self.branch2(x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = self.stem(out)
+                result = identity + 0.3*out
+            else:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                result = identity
+        else:
+            if self.use_checkpoint:
+                x0 = checkpoint(self.branch0, x)
+                x1 = checkpoint(self.branch1, x)
+                x2 = checkpoint(self.branch2, x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = checkpoint(self.stem, out)
+            else:
+                x0 = self.branch0(x)
+                x1 = self.branch1(x)
+                x2 = self.branch2(x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = self.stem(out)
+            if self.multFlag:
+                result = identity + 0.3 * out * self.prob
+            else:
+                retult = identity + 0.3 * out
+
+        result = self.relu(result)
+        return result
         a = torch.equal(self.m.sample(),torch.ones(1))
         identity = x.clone()
         if self.training:
@@ -408,6 +602,129 @@ class BlockC(nn.Module):
         self.relu = nn.ReLU(inplace = True)
 
     def forward(self, x):
+        a = torch.equal(self.m.sample().to(x.device), torch.ones(1, device=x.device))
+        identity = x.clone()
+        if self.training:
+            if a:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+                if self.use_checkpoint:
+                    x0 = checkpoint(self.branch0, x)
+                    x1 = checkpoint(self.branch1, x)
+                    out = torch.cat((x0, x1), 1)
+                    out = checkpoint(self.stem, out)
+                else:
+                    x0 = self.branch0(x)
+                    x1 = self.branch1(x)
+                    out = torch.cat((x0, x1), 1)
+                    out = self.stem(out)
+                result = identity + 0.3 * out
+            else:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                result = identity
+        else:
+            if self.use_checkpoint:
+                x0 = checkpoint(self.branch0, x)
+                x1 = checkpoint(self.branch1, x)
+                out = torch.cat((x0, x1), 1)
+                out = checkpoint(self.stem, out)
+            else:
+                x0 = self.branch0(x)
+                x1 = self.branch1(x)
+                out = torch.cat((x0, x1), 1)
+                out = self.stem(out)
+            if self.multFlag:
+                result = identity + 0.3 * out * self.prob
+            else:
+                result = identity + 0.3 * out
+        result = self.relu(result)
+        return result
+        # PERBAIKAN: PINDAHKAN TENSOR KE DEVICE YANG SAMA DENGAN X
+        a = torch.equal(self.m.sample().to(x.device), torch.ones(1, device=x.device))
+        identity = x.clone()
+        if self.training:
+            if a:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = True
+
+                if self.use_checkpoint:
+                    x0 = checkpoint(self.branch0, x)
+                    x1 = checkpoint(self.branch1, x)
+                    x2 = checkpoint(self.branch2, x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = checkpoint(self.stem, out)
+                else:
+                    x0 = self.branch0(x)
+                    x1 = self.branch1(x)
+                    x2 = self.branch2(x)
+                    out = torch.cat((x0, x1, x2), 1)
+                    out = self.stem(out)
+                result = identity + 0.3*out
+            else:
+                for item in self.branch0.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch1.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.branch2.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+
+                for item in self.stem.modules():
+                    if isinstance(item, nn.Conv2d):
+                        item.weight.requires_grad = False
+                result = identity
+        else:
+            if self.use_checkpoint:
+                x0 = checkpoint(self.branch0, x)
+                x1 = checkpoint(self.branch1, x)
+                x2 = checkpoint(self.branch2, x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = checkpoint(self.stem, out)
+            else:
+                x0 = self.branch0(x)
+                x1 = self.branch1(x)
+                x2 = self.branch2(x)
+                out = torch.cat((x0, x1, x2), 1)
+                out = self.stem(out)
+            if self.multFlag:
+                result = identity + 0.3 * out * self.prob
+            else:
+                retult = identity + 0.3 * out
+
+        result = self.relu(result)
+        return result
         a = torch.equal(self.m.sample(),torch.ones(1))
         identity = x.clone()
         if self.training:
@@ -525,9 +842,13 @@ class APolynet(nn.Module):
     def forward(self, x, flip=False):
         output = {}
 
+        # AMBIL DEVICE DARI MODEL, INI CARA PALING AMAN
+        model_device = next(self.parameters()).device
+
         img_list = []
         for cnt in range(x.size(0)):
             tmp = x[cnt]
+            # Pindahkan ke CPU untuk diproses dengan numpy/cv2
             tmp = tmp.cpu().numpy()
             tmp = tmp.astype(np.uint8)
             tmp = tmp.transpose((1, 2, 0))
@@ -536,12 +857,17 @@ class APolynet(nn.Module):
             if flip:
                 tmp = cv2.flip(tmp, 1)
             tmp = tmp.transpose((2, 0, 1))
+            # Buat lagi jadi tensor (masih di CPU)
             tmp = torch.from_numpy(tmp)
             tmp = tmp.float()
             tmp = tmp[None, ...]
             img_list.append(tmp)
+
+        # Gabungkan semua tensor CPU
         x = torch.cat(img_list, 0)
-        # x = x.cuda()
+
+        # PINDAHKAN KEMBALI X KE GPU SEBELUM MASUK KE LAYER BERIKUTNYA
+        x = x.to(model_device)
 
         ori = x
         x = self.stem(x)

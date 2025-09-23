@@ -61,7 +61,6 @@ def predict():
         if frames.size == 0:
             return jsonify({"error": "Failed to extract frames"}), 500
 
-        # Convert frames ke float32 & normalisasi sebelum predict
         frames = frames.astype("float32") / 255.0
 
         # Predict dengan try-except untuk debugging
@@ -121,3 +120,20 @@ def predict():
     return jsonify(detection)
 
 
+@bp.route("/history", methods=["GET"])
+def get_history():
+    try:
+        detections = Detection.query.order_by(Detection.id.desc()).all()
+        serialized_detections = detection_schema.dump(detections, many=True)
+
+        ocean_keys = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']
+
+        transformed_detections = []
+        for detection_data in serialized_detections:
+            results_data = {key: detection_data.pop(key) for key in ocean_keys if key in detection_data}
+            detection_data['results'] = results_data
+            transformed_detections.append(detection_data)
+
+        return jsonify(transformed_detections)
+    except Exception as e:
+        return jsonify({"error": f"Could not retrieve history: {e}"}), 500
