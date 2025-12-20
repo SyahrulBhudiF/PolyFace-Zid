@@ -82,11 +82,11 @@ def predict():
             age=int(age) if age else None,
             gender=gender,
             image_path=save_path,
-            openness=scores["O"] * 100,
-            conscientiousness=scores["C"] * 100,
-            extraversion=scores["E"] * 100,
-            agreeableness=scores["A"] * 100,
-            neuroticism=scores["N"] * 100
+            openness=scores["Openness"],
+            conscientiousness=scores["Conscientiousness"],
+            extraversion=scores["Extraversion"],
+            agreeableness=scores["Agreeableness"],
+            neuroticism=scores["Neuroticism"]
         )
 
         print("[DEBUG] New detection object:", detection)

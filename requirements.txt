@@ -13,3 +13,9 @@ keras-applications
 opencv-python
 cryptography
 flask-cors
+torch
+mtcnn
+numpy
+pandas
+reportlab
+torchsummary
