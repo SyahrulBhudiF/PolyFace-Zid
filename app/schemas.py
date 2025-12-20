@@ -1,6 +1,17 @@
-from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 from marshmallow import fields
-from .models import Detection
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+
+from .models import Detection, User
+
+
+class UserSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = User
+        load_instance = True
+        exclude = ("password", "detections")
+
+    created_at = fields.DateTime(format="%Y-%m-%d %H:%M:%S")
+
 
 class DetectionSchema(SQLAlchemyAutoSchema):
     class Meta:
@@ -9,3 +20,4 @@ class DetectionSchema(SQLAlchemyAutoSchema):
         include_fk = True
 
     created_at = fields.DateTime(format="%Y-%m-%d %H:%M:%S")
+    user = fields.Nested(UserSchema, dump_only=True)
