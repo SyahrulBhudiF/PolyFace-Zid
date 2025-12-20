@@ -1,6 +1,8 @@
 flask
 flask-sqlalchemy
 flask-migrate
+flask-jwt-extended
+flask-bcrypt
 python-dotenv
 PyMySQL
 marshmallow
