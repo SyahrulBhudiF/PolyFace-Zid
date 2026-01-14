@@ -2,11 +2,13 @@ import os
 
 import cv2
 import numpy as np
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from . import db
-from .models import Detection
+from .insights import generate_ocean_insights, get_insight_for_detection
+from .models import Detection, User
+from .pdf_generator import generate_pdf_report
 from .schemas import DetectionSchema
 from .services.predict import predict_ocean
 
@@ -62,26 +64,19 @@ def predict():
     file.save(save_path)
 
     try:
-        # Extract frames
         frames = extract_frames(save_path)
-        print("[DEBUG] Frames shape:", frames.shape, "dtype:", frames.dtype)
 
         if frames.size == 0:
             return jsonify({"error": "Failed to extract frames"}), 500
 
         frames = frames.astype("float32") / 255.0
 
-        # Predict dengan try-except untuk debugging
         try:
             scores = predict_ocean(frames)
-
-            print("[DEBUG] Prediction scores:", scores)
         except Exception as e:
-            print("[ERROR] Predict failed:", e)
             return jsonify({"error": f"Predict failed: {e}"}), 500
 
     except Exception as e:
-        print("[ERROR] Frame extraction failed:", e)
         return jsonify({"error": f"Frame extraction failed: {e}"}), 500
 
     try:
@@ -98,16 +93,12 @@ def predict():
             neuroticism=scores["Neuroticism"],
         )
 
-        print("[DEBUG] New detection object:", detection)
-
         db.session.add(detection)
         db.session.commit()
     except Exception as e:
-        print("[ERROR] Database commit failed:", e)
         return jsonify({"error": f"Database error: {e}"}), 500
 
     detection = detection_schema.dump(detection)
-    print("[DEBUG] Serialized detection:", detection)
 
     ocean_keys = [
         "openness",
@@ -118,7 +109,6 @@ def predict():
     ]
 
     results_data = {key: detection.pop(key) for key in ocean_keys if key in detection}
-
     detection["results"] = results_data
 
     return jsonify(detection)
@@ -130,7 +120,6 @@ def get_history():
     user_id = get_jwt_identity()
 
     try:
-        # Filter detections by user_id
         detections = (
             Detection.query.filter_by(user_id=int(user_id))
             .order_by(Detection.id.desc())
@@ -214,3 +203,123 @@ def delete_detection(detection_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Could not delete detection: {e}"}), 500
+
+
+@bp.route("/history/<int:detection_id>/insights", methods=["GET"])
+@jwt_required()
+def get_detection_insights(detection_id):
+    user_id = get_jwt_identity()
+
+    try:
+        detection = Detection.query.filter_by(
+            id=detection_id, user_id=int(user_id)
+        ).first()
+
+        if not detection:
+            return jsonify({"error": "Detection not found"}), 404
+
+        insights = get_insight_for_detection(detection)
+
+        return jsonify(
+            {
+                "detection_id": detection_id,
+                "scores": {
+                    "openness": detection.openness,
+                    "conscientiousness": detection.conscientiousness,
+                    "extraversion": detection.extraversion,
+                    "agreeableness": detection.agreeableness,
+                    "neuroticism": detection.neuroticism,
+                },
+                "insights": insights,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": f"Could not generate insights: {e}"}), 500
+
+
+@bp.route("/history/<int:detection_id>/report", methods=["GET"])
+@jwt_required()
+def generate_report(detection_id):
+    user_id = int(get_jwt_identity())
+
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if user.is_admin():
+            detection = Detection.query.get(detection_id)
+        else:
+            detection = Detection.query.filter_by(
+                id=detection_id,
+                user_id=user_id
+            ).first()
+
+        if not detection:
+            return jsonify({"error": "Detection not found"}), 404
+
+        owner = User.query.get(detection.user_id)
+
+        pdf_buffer = generate_pdf_report(
+            detection=detection,
+            user_name=owner.name,
+            user_email=owner.email,
+        )
+
+        safe_name = detection.name.replace(" ", "_") if detection.name else "report"
+        filename = f"OCEAN_Report_{safe_name}_{detection_id}.pdf"
+
+        return Response(
+            pdf_buffer.getvalue(),
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Type": "application/pdf",
+            },
+        )
+    except Exception as e:
+        return jsonify({"error": f"Could not generate report: {e}"}), 500
+
+
+@bp.route("/history/<int:detection_id>/report/preview", methods=["GET"])
+@jwt_required()
+def preview_report(detection_id):
+    user_id = int(get_jwt_identity())
+
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if user.is_admin():
+            detection = Detection.query.get(detection_id)
+        else:
+            detection = Detection.query.filter_by(
+                id=detection_id,
+                user_id=user_id
+            ).first()
+
+        if not detection:
+            return jsonify({"error": "Detection not found"}), 404
+
+        owner = User.query.get(detection.user_id)
+
+        pdf_buffer = generate_pdf_report(
+            detection=detection,
+            user_name=owner.name,
+            user_email=owner.email,
+        )
+
+        safe_name = detection.name.replace(" ", "_") if detection.name else "report"
+        filename = f"OCEAN_Report_{safe_name}_{detection_id}.pdf"
+
+        return Response(
+            pdf_buffer.getvalue(),
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Content-Type": "application/pdf",
+            },
+        )
+    except Exception as e:
+        return jsonify({"error": f"Could not generate report: {e}"}), 500

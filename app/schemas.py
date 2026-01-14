@@ -11,6 +11,7 @@ class UserSchema(SQLAlchemyAutoSchema):
         exclude = ("password", "detections")
 
     created_at = fields.DateTime(format="%Y-%m-%d %H:%M:%S")
+    role = fields.String(dump_only=True)
 
 
 class DetectionSchema(SQLAlchemyAutoSchema):

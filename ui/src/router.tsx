@@ -1,100 +1,136 @@
+import { useEffect } from "react";
 import {
-	createRootRoute,
-	createRoute,
-	createRouter,
-	Navigate,
-	Outlet,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Navigate,
+  Outlet,
 } from "@tanstack/react-router";
-import { useAuth } from "./contexts/AuthContext";
+import { useAuth, useAuthStore } from "@/stores/auth";
 import Detector from "./pages/Detector";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 
-// Auth guard component
+function RootComponent() {
+  const fetchUser = useAuthStore((s) => s.fetchUser);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  return <Outlet />;
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-	const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-	if (isLoading) {
-		return (
-			<div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
-				<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-			</div>
-		);
-	}
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
-	if (!isAuthenticated) {
-		return <Navigate to="/login" />;
-	}
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
 
-	return <>{children}</>;
+  return <>{children}</>;
 }
 
-// Guest route (redirect if already logged in)
 function GuestRoute({ children }: { children: React.ReactNode }) {
-	const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-	if (isLoading) {
-		return (
-			<div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
-				<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-			</div>
-		);
-	}
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
-	if (isAuthenticated) {
-		return <Navigate to="/" />;
-	}
+  if (isAuthenticated) {
+    return <Navigate to="/" />;
+  }
 
-	return <>{children}</>;
+  return <>{children}</>;
 }
 
-// Root route
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!user?.is_admin && user?.role !== "admin") {
+    return <Navigate to="/" />;
+  }
+
+  return <>{children}</>;
+}
+
 const rootRoute = createRootRoute({
-	component: () => <Outlet />,
+  component: RootComponent,
 });
 
-// Home/Detector route (protected)
 const indexRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/",
-	component: () => (
-		<ProtectedRoute>
-			<Detector />
-		</ProtectedRoute>
-	),
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: () => (
+    <ProtectedRoute>
+      <Detector />
+    </ProtectedRoute>
+  ),
 });
 
-// Login route (guest only)
 const loginRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/login",
-	component: () => (
-		<GuestRoute>
-			<Login />
-		</GuestRoute>
-	),
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: () => (
+    <GuestRoute>
+      <Login />
+    </GuestRoute>
+  ),
 });
 
-// Register route (guest only)
 const registerRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/register",
-	component: () => (
-		<GuestRoute>
-			<Register />
-		</GuestRoute>
-	),
+  getParentRoute: () => rootRoute,
+  path: "/register",
+  component: () => (
+    <GuestRoute>
+      <Register />
+    </GuestRoute>
+  ),
 });
 
-// Route tree
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, registerRoute]);
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: () => (
+    <AdminRoute>
+      <AdminDashboard />
+    </AdminRoute>
+  ),
+});
 
-// Create router
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  registerRoute,
+  adminRoute,
+]);
+
 export const router = createRouter({ routeTree });
 
-// Type declaration for router
 declare module "@tanstack/react-router" {
-	interface Register {
-		router: typeof router;
-	}
+  interface Register {
+    router: typeof router;
+  }
 }
