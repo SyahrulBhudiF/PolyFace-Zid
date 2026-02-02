@@ -34,6 +34,21 @@ export default function Detector() {
       name: "",
       age: 0,
       gender: "male" as "male" | "female",
+      modelKey: "auto" as
+        | "auto"
+        | "ckpt_1127_145313"
+        | "ckpt_1208_153234"
+        | "ckpt_1214_094941"
+        | "ckpt_1216_124129"
+        | "ckpt_1226_093721"
+        | "ckpt_1228_011726"
+        | "ckpt_1228_163427"
+        | "ckpt_1229_024515"
+        | "ckpt_1229_161540"
+        | "ckpt_1230_222717"
+        | "h5_adagrad"
+        | "h5_adagrad_keras"
+        | "h5_adam",
     },
     validators: {
       onSubmit: personDataSchema,
@@ -48,6 +63,7 @@ export default function Detector() {
         name: value.name,
         age: value.age,
         gender: value.gender,
+        modelKey: value.modelKey,
       });
 
       form.reset();
@@ -121,7 +137,7 @@ export default function Detector() {
                   }}
                   className="space-y-6"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <form.Field name="name">
                       {(field) => (
                         <div className="space-y-2">
@@ -208,6 +224,98 @@ export default function Detector() {
                           >
                             <option value="male">Male</option>
                             <option value="female">Female</option>
+                          </select>
+                          {form.state.isSubmitted &&
+                            field.state.meta.errors.length > 0 && (
+                              <p className="text-sm text-red-500">
+                                {field.state.meta.errors
+                                  .map((e) => e.message)
+                                  .join(", ")}
+                              </p>
+                            )}
+                        </div>
+                      )}
+                    </form.Field>
+
+                    <form.Field name="modelKey">
+                      {(field) => (
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor={field.name}
+                            className="text-sm font-medium text-gray-700"
+                          >
+                            Model
+                          </Label>
+                          <select
+                            id={field.name}
+                            value={field.state.value}
+                            onChange={(e) =>
+                              field.handleChange(
+                                e.target.value as
+                                  | "auto"
+                                  | "ckpt_1127_145313"
+                                  | "ckpt_1208_153234"
+                                  | "ckpt_1214_094941"
+                                  | "ckpt_1216_124129"
+                                  | "ckpt_1226_093721"
+                                  | "ckpt_1228_011726"
+                                  | "ckpt_1228_163427"
+                                  | "ckpt_1229_024515"
+                                  | "ckpt_1229_161540"
+                                  | "ckpt_1230_222717"
+                                  | "h5_adagrad"
+                                  | "h5_adagrad_keras"
+                                  | "h5_adam",
+                              )
+                            }
+                            onBlur={field.handleBlur}
+                            disabled={detectMutation.isPending}
+                            className="w-full p-2 border border-gray-300 rounded-md transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="auto">Auto (Checkpoint → H5)</option>
+                            <optgroup label="Checkpoint Models">
+                              <option value="ckpt_1127_145313">
+                                Checkpoint - Adagrad (ALL)
+                              </option>
+                              <option value="ckpt_1208_153234">
+                                Checkpoint - SGD (ALL)
+                              </option>
+                              <option value="ckpt_1214_094941">
+                                Checkpoint - Adagrad (10k)
+                              </option>
+                              <option value="ckpt_1216_124129">
+                                Checkpoint - 1216_124129
+                              </option>
+                              <option value="ckpt_1226_093721">
+                                Checkpoint - 1226_093721
+                              </option>
+                              <option value="ckpt_1228_011726">
+                                Checkpoint - RMSprop (ALL)
+                              </option>
+                              <option value="ckpt_1228_163427">
+                                Checkpoint - Adam (ALL)
+                              </option>
+                              <option value="ckpt_1229_024515">
+                                Checkpoint - 1229_024515
+                              </option>
+                              <option value="ckpt_1229_161540">
+                                Checkpoint - NoOptimizer (10k)
+                              </option>
+                              <option value="ckpt_1230_222717">
+                                Checkpoint - NoOptimizer (ALL)
+                              </option>
+                            </optgroup>
+                            <optgroup label="H5/Keras Models">
+                              <option value="h5_adagrad">
+                                H5 - Adagrad Optimizer
+                              </option>
+                              <option value="h5_adagrad_keras">
+                                Keras - Adagrad Optimizer
+                              </option>
+                              <option value="h5_adam">
+                                Keras - Adam Optimizer
+                              </option>
+                            </optgroup>
                           </select>
                           {form.state.isSubmitted &&
                             field.state.meta.errors.length > 0 && (

@@ -10,7 +10,7 @@ from .insights import generate_ocean_insights, get_insight_for_detection
 from .models import Detection, User
 from .pdf_generator import generate_pdf_report
 from .schemas import DetectionSchema
-from .services.predict import predict_ocean
+from .services.predict import predict_ocean, get_available_models
 
 detection_schema = DetectionSchema()
 
@@ -57,6 +57,7 @@ def predict():
     name = request.form.get("name")
     age = request.form.get("age")
     gender = request.form.get("gender")
+    model_key = request.form.get("model", "auto")
 
     os.makedirs("video", exist_ok=True)
     fileName = f"{hash(file.filename)}_{file.filename}"
@@ -72,7 +73,7 @@ def predict():
         frames = frames.astype("float32") / 255.0
 
         try:
-            scores = predict_ocean(frames)
+            scores = predict_ocean(frames, model_key=model_key)
         except Exception as e:
             return jsonify({"error": f"Predict failed: {e}"}), 500
 
@@ -112,6 +113,17 @@ def predict():
     detection["results"] = results_data
 
     return jsonify(detection)
+
+
+@bp.route("/models", methods=["GET"])
+@jwt_required()
+def get_models():
+    """Get available models with their display names."""
+    try:
+        models = get_available_models()
+        return jsonify(models)
+    except Exception as e:
+        return jsonify({"error": f"Could not retrieve models: {e}"}), 500
 
 
 @bp.route("/history", methods=["GET"])
