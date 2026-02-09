@@ -20,11 +20,28 @@ export interface DetectionResult {
   results: OceanScores;
 }
 
+export type ModelKey =
+  | "auto"
+  | "ckpt_1127_145313"
+  | "ckpt_1208_153234"
+  | "ckpt_1214_094941"
+  | "ckpt_1216_124129"
+  | "ckpt_1226_093721"
+  | "ckpt_1228_011726"
+  | "ckpt_1228_163427"
+  | "ckpt_1229_024515"
+  | "ckpt_1229_161540"
+  | "ckpt_1230_222717"
+  | "h5_adagrad"
+  | "h5_adagrad_keras"
+  | "h5_adam";
+
 export interface DetectionInput {
   file: File;
   name: string;
   age: number;
   gender: "male" | "female";
+  modelKey?: ModelKey;
 }
 
 export function useDetectionHistory() {
@@ -53,6 +70,7 @@ export function useDetect() {
       formData.append("name", input.name);
       formData.append("age", input.age.toString());
       formData.append("gender", input.gender);
+      formData.append("model", input.modelKey ?? "auto");
 
       return api.upload<DetectionResult>("/predict", null, formData);
     },

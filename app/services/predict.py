@@ -2,7 +2,12 @@
 OCEAN Personality Prediction Service
 
 Provides model loading and prediction functions for OCEAN personality traits.
-Refactored for cleaner code structure and reduced verbosity.
+
+Supports selecting which model to use at prediction time via `model_key`:
+- auto: try checkpoint first (1127_145313), then H5 fallback (polyface_adagrad.h5)
+- ckpt_*: force checkpoint models (1127_145313, 1208_153234, 1214_094941, 1216_124129,
+  1226_093721, 1228_011726, 1228_163427, 1229_024515, 1229_161540, 1230_222717)
+- h5_*: force H5/Keras models (h5_adagrad, h5_adagrad_keras, h5_adam)
 """
 
 import os
@@ -24,13 +29,35 @@ from .polyfacemodels2 import create_model_polyface3, wrap_polyface_tf
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models", "1127_145313", "polyface.t5")
-MODEL_PATH_H5 = os.path.join(BASE_DIR, "models", "keras", "polyface_adagrad.h5")
+
+# Registry of supported models (UI sends these keys)
+# Checkpoint models available in models/models/ directory
+# Display names include optimizer and dataset info for clarity
+MODEL_REGISTRY = {
+    "auto": {"type": "auto", "display_name": "Auto (Checkpoint → H5)"},
+    # Checkpoint models with optimizer information
+    "ckpt_1127_145313": {"type": "checkpoint", "dir": "1127_145313", "display_name": "Checkpoint - Adagrad (ALL)"},
+    "ckpt_1208_153234": {"type": "checkpoint", "dir": "1208_153234", "display_name": "Checkpoint - SGD (ALL)"},
+    "ckpt_1214_094941": {"type": "checkpoint", "dir": "1214_094941", "display_name": "Checkpoint - Adagrad (10k)"},
+    "ckpt_1216_124129": {"type": "checkpoint", "dir": "1216_124129", "display_name": "Checkpoint - 1216_124129"},
+    "ckpt_1226_093721": {"type": "checkpoint", "dir": "1226_093721", "display_name": "Checkpoint - 1226_093721"},
+    "ckpt_1228_011726": {"type": "checkpoint", "dir": "1228_011726", "display_name": "Checkpoint - RMSprop (ALL)"},
+    "ckpt_1228_163427": {"type": "checkpoint", "dir": "1228_163427", "display_name": "Checkpoint - Adam (ALL)"},
+    "ckpt_1229_024515": {"type": "checkpoint", "dir": "1229_024515", "display_name": "Checkpoint - 1229_024515"},
+    "ckpt_1229_161540": {"type": "checkpoint", "dir": "1229_161540", "display_name": "Checkpoint - NoOptimizer (10k)"},
+    "ckpt_1230_222717": {"type": "checkpoint", "dir": "1230_222717", "display_name": "Checkpoint - NoOptimizer (ALL)"},
+    # H5/Keras models
+    "h5_adagrad": {"type": "h5", "path": os.path.join(BASE_DIR, "keras", "polyface_adagrad.h5"), "display_name": "H5 - Adagrad Optimizer"},
+    "h5_adagrad_keras": {"type": "h5", "path": os.path.join(BASE_DIR, "keras", "polyface_adagrad.keras"), "display_name": "Keras - Adagrad Optimizer"},
+    "h5_adam": {"type": "h5", "path": os.path.join(BASE_DIR, "keras", "polyface_adam.keras"), "display_name": "Keras - Adam Optimizer"},
+}
+
+DEFAULT_MODEL_KEY = "auto"
 
 OCEAN_TRAITS = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
 
 # Global model cache
-_model_instance: Optional[keras.Model] = None
+_model_cache: dict[str, keras.Model] = {}
 _feature_extractor_instance = None
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -140,10 +167,10 @@ def _load_weights_from_checkpoint(model: keras.Model, checkpoint_path: str) -> b
 
 def _load_from_h5(model_path: str) -> Optional[keras.Model]:
     """
-    Load model from H5 file as fallback.
+    Load model from H5 or Keras file.
 
     Args:
-        model_path: Path to H5 model file.
+        model_path: Path to H5 or Keras model file (.h5 or .keras).
 
     Returns:
         Loaded Keras model or None if loading failed.
@@ -186,7 +213,22 @@ def _load_from_h5(model_path: str) -> Optional[keras.Model]:
 # Public API
 # =============================================================================
 
-def get_model() -> keras.Model:
+def _checkpoint_base_path(checkpoint_dir_name: str) -> str:
+    """
+    Build checkpoint base path for a given directory name.
+
+    Tries both:
+    - app/services/models/<dir>/polyface.t5
+    - app/services/models/models/<dir>/polyface.t5
+    """
+    p1 = os.path.join(BASE_DIR, "models", checkpoint_dir_name, "polyface.t5")
+    if os.path.exists(os.path.dirname(p1)):
+        return p1
+    p2 = os.path.join(BASE_DIR, "models", "models", checkpoint_dir_name, "polyface.t5")
+    return p2
+
+
+def get_model(model_key: str = DEFAULT_MODEL_KEY) -> keras.Model:
     """
     Get or load the OCEAN prediction model.
 
@@ -198,36 +240,102 @@ def get_model() -> keras.Model:
     Raises:
         RuntimeError: If model cannot be loaded.
     """
-    global _model_instance
+    global _model_cache
 
-    if _model_instance is not None:
-        return _model_instance
+    if model_key not in MODEL_REGISTRY:
+        logger.warning(f"Unknown model_key '{model_key}', falling back to '{DEFAULT_MODEL_KEY}'")
+        model_key = DEFAULT_MODEL_KEY
 
-    logger.info("Loading OCEAN prediction model...")
+    # Return cached model if already loaded
+    if model_key in _model_cache:
+        logger.info(f"Using cached model for model_key='{model_key}'")
+        return _model_cache[model_key]
 
-    # Try loading from checkpoint first
-    try:
-        checkpoint_path = _resolve_checkpoint_path(MODEL_PATH)
-        _model_instance = build_model()
+    spec = MODEL_REGISTRY[model_key]
+    spec_type = spec["type"]
 
-        if _load_weights_from_checkpoint(_model_instance, checkpoint_path):
-            logger.info("Model loaded successfully from checkpoint")
-            return _model_instance
-    except FileNotFoundError as e:
-        logger.warning(f"Checkpoint not found: {e}")
-    except Exception as e:
-        logger.warning(f"Failed to load from checkpoint: {e}")
+    logger.info(f"Loading OCEAN prediction model for model_key='{model_key}' (type='{spec_type}')")
 
-    # Fallback to H5 file
-    _model_instance = _load_from_h5(MODEL_PATH_H5)
-    if _model_instance is not None:
-        return _model_instance
+    # Force checkpoint
+    if spec_type == "checkpoint":
+        ckpt_dir = spec["dir"]
+        checkpoint_base = _checkpoint_base_path(ckpt_dir)
+        checkpoint_path = _resolve_checkpoint_path(checkpoint_base)
+        model = build_model()
 
-    raise RuntimeError(
-        "Failed to load model. Ensure checkpoint or H5 file exists at:\n"
-        f"  - Checkpoint: {MODEL_PATH}\n"
-        f"  - H5: {MODEL_PATH_H5}"
-    )
+        if _load_weights_from_checkpoint(model, checkpoint_path):
+            logger.info(f"Model loaded successfully from checkpoint ({checkpoint_path})")
+            _model_cache[model_key] = model
+            return model
+        raise RuntimeError(f"Failed to load checkpoint weights for model_key='{model_key}' from {checkpoint_path}")
+
+    # Force H5
+    if spec_type == "h5":
+        h5_path = spec["path"]
+        model = _load_from_h5(h5_path)
+        if model is None:
+            raise RuntimeError(f"Failed to load H5 model for model_key='{model_key}' from {h5_path}")
+        _model_cache[model_key] = model
+        return model
+
+    # Auto: try checkpoint first (1127_145313), then H5 fallback (polyface_adagrad.h5)
+    if spec_type == "auto":
+        # 1) Try checkpoint
+        try:
+            ckpt_dir = MODEL_REGISTRY["ckpt_1127_145313"]["dir"]
+            checkpoint_base = _checkpoint_base_path(ckpt_dir)
+            checkpoint_path = _resolve_checkpoint_path(checkpoint_base)
+            model = build_model()
+            if _load_weights_from_checkpoint(model, checkpoint_path):
+                logger.info(f"Auto selected checkpoint model: {checkpoint_path}")
+                _model_cache[model_key] = model
+                return model
+        except Exception as e:
+            logger.warning(f"Auto checkpoint load failed, will try H5 fallback: {e}")
+
+        # 2) Try H5
+        h5_path = MODEL_REGISTRY["h5_adagrad"]["path"]
+        model = _load_from_h5(h5_path)
+        if model is not None:
+            logger.info(f"Auto selected H5 model: {h5_path}")
+            _model_cache[model_key] = model
+            return model
+
+        raise RuntimeError(
+            "Auto model selection failed. Checked:\n"
+            f"  - Checkpoint: {_checkpoint_base_path(MODEL_REGISTRY['ckpt_1127_145313']['dir'])}\n"
+            f"  - H5: {h5_path}"
+        )
+
+    raise RuntimeError(f"Invalid model registry type for model_key='{model_key}': {spec_type}")
+
+
+def get_model_display_name(model_key: str) -> str:
+    """
+    Get the display name for a model key.
+
+    Args:
+        model_key: Model key from MODEL_REGISTRY.
+
+    Returns:
+        Display name for the model, or the model_key if not found.
+    """
+    if model_key in MODEL_REGISTRY and "display_name" in MODEL_REGISTRY[model_key]:
+        return MODEL_REGISTRY[model_key]["display_name"]
+    return model_key
+
+
+def get_available_models() -> dict[str, str]:
+    """
+    Get all available models with their display names.
+
+    Returns:
+        Dictionary mapping model keys to display names.
+    """
+    return {
+        key: spec.get("display_name", key)
+        for key, spec in MODEL_REGISTRY.items()
+    }
 
 
 def get_feature_extractor():
@@ -247,9 +355,9 @@ def get_feature_extractor():
 
 def clear_model_cache() -> None:
     """Clear the model cache to free memory."""
-    global _model_instance, _feature_extractor_instance
+    global _model_cache, _feature_extractor_instance
 
-    _model_instance = None
+    _model_cache = {}
     _feature_extractor_instance = None
 
     if torch.cuda.is_available():
@@ -297,7 +405,7 @@ def preprocess(frames: np.ndarray) -> np.ndarray:
     return frames
 
 
-def predict_ocean(frames: np.ndarray) -> dict[str, float]:
+def predict_ocean(frames: np.ndarray, model_key: str = DEFAULT_MODEL_KEY) -> dict[str, float]:
     """
     Predict OCEAN personality traits from video frames.
 
@@ -310,7 +418,8 @@ def predict_ocean(frames: np.ndarray) -> dict[str, float]:
     Raises:
         RuntimeError: If prediction fails.
     """
-    model = get_model()
+    model = get_model(model_key=model_key)
+    logger.info(f"Predicting with model_key='{model_key}'")
 
     if model is None:
         raise RuntimeError("Model is not loaded")
