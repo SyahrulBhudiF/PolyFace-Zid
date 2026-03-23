@@ -220,6 +220,98 @@ export default function Detector() {
                         </div>
                       )}
                     </form.Field>
+
+                    <form.Field name="modelKey">
+                      {(field) => (
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor={field.name}
+                            className="text-sm font-medium text-gray-700"
+                          >
+                            Model
+                          </Label>
+                          <select
+                            id={field.name}
+                            value={field.state.value}
+                            onChange={(e) =>
+                              field.handleChange(
+                                e.target.value as
+                                  | "auto"
+                                  | "ckpt_1127_145313"
+                                  | "ckpt_1208_153234"
+                                  | "ckpt_1214_094941"
+                                  | "ckpt_1216_124129"
+                                  | "ckpt_1226_093721"
+                                  | "ckpt_1228_011726"
+                                  | "ckpt_1228_163427"
+                                  | "ckpt_1229_024515"
+                                  | "ckpt_1229_161540"
+                                  | "ckpt_1230_222717"
+                                  | "ckpt_1124_171024"
+                                  | "ckpt_final"
+                                  | "ckpt_final_2",
+                              )
+                            }
+                            onBlur={field.handleBlur}
+                            disabled={detectMutation.isPending}
+                            className="w-full p-2 border border-gray-300 rounded-md transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="auto">Auto (Checkpoint → H5)</option>
+                            <optgroup label="PyTorch Models">
+                              <option value="ckpt_final">
+                                PyTorch - Final Model
+                              </option>
+                              <option value="ckpt_1124_171024">
+                                PyTorch - Adagrad (10k)
+                              </option>
+                              <option value="ckpt_final_2">
+                                PyTorch - Final v2 (MobileNet)
+                              </option>
+                            </optgroup>
+                            <optgroup label="Checkpoint Models (TF)">
+                              <option value="ckpt_1127_145313">
+                                Checkpoint - Adagrad (ALL)
+                              </option>
+                              <option value="ckpt_1208_153234">
+                                Checkpoint - SGD (ALL)
+                              </option>
+                              <option value="ckpt_1214_094941">
+                                Checkpoint - Adagrad (10k)
+                              </option>
+                              <option value="ckpt_1216_124129">
+                                Checkpoint - 1216_124129
+                              </option>
+                              <option value="ckpt_1226_093721">
+                                Checkpoint - 1226_093721
+                              </option>
+                              <option value="ckpt_1228_011726">
+                                Checkpoint - RMSprop (ALL)
+                              </option>
+                              <option value="ckpt_1228_163427">
+                                Checkpoint - Adam (ALL)
+                              </option>
+                              <option value="ckpt_1229_024515">
+                                Checkpoint - 1229_024515
+                              </option>
+                              <option value="ckpt_1229_161540">
+                                Checkpoint - NoOptimizer (10k)
+                              </option>
+                              <option value="ckpt_1230_222717">
+                                Checkpoint - NoOptimizer (ALL)
+                              </option>
+                            </optgroup>
+                          </select>
+                          {form.state.isSubmitted &&
+                            field.state.meta.errors.length > 0 && (
+                              <p className="text-sm text-red-500">
+                                {field.state.meta.errors
+                                  .map((e) => e.message)
+                                  .join(", ")}
+                              </p>
+                            )}
+                        </div>
+                      )}
+                    </form.Field>
                   </div>
 
                   <div className="flex gap-3">
