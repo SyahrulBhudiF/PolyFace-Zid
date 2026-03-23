@@ -44,6 +44,7 @@ export interface DetectionInput {
   name: string;
   age: number;
   gender: "male" | "female";
+  modelKey?: ModelKey;
 }
 
 export function useDetectionHistory() {
@@ -72,6 +73,7 @@ export function useDetect() {
       formData.append("name", input.name);
       formData.append("age", input.age.toString());
       formData.append("gender", input.gender);
+      formData.append("model", input.modelKey ?? "auto");
 
       return api.upload<DetectionResult>("/predict", null, formData);
     },

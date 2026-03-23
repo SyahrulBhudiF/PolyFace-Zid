@@ -34,6 +34,21 @@ export default function Detector() {
       name: "",
       age: 0,
       gender: "male" as "male" | "female",
+      modelKey: "auto" as
+        | "auto"
+        | "ckpt_1127_145313"
+        | "ckpt_1208_153234"
+        | "ckpt_1214_094941"
+        | "ckpt_1216_124129"
+        | "ckpt_1226_093721"
+        | "ckpt_1228_011726"
+        | "ckpt_1228_163427"
+        | "ckpt_1229_024515"
+        | "ckpt_1229_161540"
+        | "ckpt_1230_222717"
+        | "h5_adagrad"
+        | "h5_adagrad_keras"
+        | "h5_adam",
     },
     validators: {
       onSubmit: personDataSchema,
@@ -48,6 +63,7 @@ export default function Detector() {
         name: value.name,
         age: value.age,
         gender: value.gender,
+        modelKey: value.modelKey,
       });
 
       form.reset();
@@ -121,7 +137,7 @@ export default function Detector() {
                   }}
                   className="space-y-6"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <form.Field name="name">
                       {(field) => (
                         <div className="space-y-2">
