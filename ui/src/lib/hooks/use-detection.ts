@@ -32,6 +32,9 @@ export type ModelKey =
   | "ckpt_1229_024515"
   | "ckpt_1229_161540"
   | "ckpt_1230_222717"
+  | "ckpt_1124_171024"
+  | "ckpt_final"
+  | "ckpt_final_2"
   | "h5_adagrad"
   | "h5_adagrad_keras"
   | "h5_adam";

@@ -18,12 +18,12 @@ export const personDataSchema = z.object({
     "ckpt_1229_024515",
     "ckpt_1229_161540",
     "ckpt_1230_222717",
-    "h5_adagrad",
-    "h5_adagrad_keras",
-    "h5_adam",
+    "ckpt_1124_171024",
+    "ckpt_final",
+    "ckpt_final_2",
   ], {
     required_error: "Model selection is required",
-  }),
+  }).default("auto"),
 });
 
 export type PersonDataFormData = z.infer<typeof personDataSchema>;

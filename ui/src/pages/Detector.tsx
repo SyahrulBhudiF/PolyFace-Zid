@@ -263,9 +263,9 @@ export default function Detector() {
                                   | "ckpt_1229_024515"
                                   | "ckpt_1229_161540"
                                   | "ckpt_1230_222717"
-                                  | "h5_adagrad"
-                                  | "h5_adagrad_keras"
-                                  | "h5_adam",
+                                  | "ckpt_1124_171024"
+                                  | "ckpt_final"
+                                  | "ckpt_final_2",
                               )
                             }
                             onBlur={field.handleBlur}
@@ -273,7 +273,18 @@ export default function Detector() {
                             className="w-full p-2 border border-gray-300 rounded-md transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <option value="auto">Auto (Checkpoint → H5)</option>
-                            <optgroup label="Checkpoint Models">
+                            <optgroup label="PyTorch Models">
+                              <option value="ckpt_final">
+                                PyTorch - Final Model
+                              </option>
+                              <option value="ckpt_1124_171024">
+                                PyTorch - Adagrad (10k)
+                              </option>
+                              <option value="ckpt_final_2">
+                                PyTorch - Final v2 (MobileNet)
+                              </option>
+                            </optgroup>
+                            <optgroup label="Checkpoint Models (TF)">
                               <option value="ckpt_1127_145313">
                                 Checkpoint - Adagrad (ALL)
                               </option>
@@ -303,17 +314,6 @@ export default function Detector() {
                               </option>
                               <option value="ckpt_1230_222717">
                                 Checkpoint - NoOptimizer (ALL)
-                              </option>
-                            </optgroup>
-                            <optgroup label="H5/Keras Models">
-                              <option value="h5_adagrad">
-                                H5 - Adagrad Optimizer
-                              </option>
-                              <option value="h5_adagrad_keras">
-                                Keras - Adagrad Optimizer
-                              </option>
-                              <option value="h5_adam">
-                                Keras - Adam Optimizer
                               </option>
                             </optgroup>
                           </select>

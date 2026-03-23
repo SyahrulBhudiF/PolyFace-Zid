@@ -540,7 +540,8 @@ class APolynet(nn.Module):
             tmp = tmp[None, ...]
             img_list.append(tmp)
         x = torch.cat(img_list, 0)
-        x = x.cuda()
+        device = next(self.parameters()).device
+        x = x.to(device)
 
         ori = x
         x = self.stem(x)

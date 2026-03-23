@@ -9,3 +9,4 @@ node_modules/
 instance/
 *.sqlite
 video/
+app/services/models/**
