@@ -609,8 +609,9 @@ def wrap_polyface_tf(polyface_model, input_shape=(10,112,112,3)):
                 x_torch = torch.from_numpy(x).float().to(device)
                 x_torch = x_torch.permute(0, 3, 1, 2)  # (B,3,H,W)
 
-                # EfficientPolyFace expects uint8 image:
-                x_torch = x_torch.clamp(0,255).byte()
+                # EfficientPolyFace expects uint8 pixels in [0, 255].
+                # Incoming frames are normalized to [0, 1], so scale first.
+                x_torch = (x_torch * 255.0).clamp(0, 255).byte()
 
                 with torch.no_grad():
                     feats = self.polyface(x_torch)  # (B,256)

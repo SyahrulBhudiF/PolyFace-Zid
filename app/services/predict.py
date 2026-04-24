@@ -1,14 +1,7 @@
 """
-OCEAN Personality Prediction Service
+OCEAN Personality Prediction Service.
 
-Hybrid TensorFlow / PyTorch inference engine for OCEAN personality traits.
-
-Model types (selected at runtime via ``model_key``):
-    checkpoint      TensorFlow checkpoint (.t5) loaded into a Keras model.
-    h5              TensorFlow H5 / Keras saved model (.h5 / .keras).
-    pytorch         PyTorch model (.pth) with PolyFace (256-dim) feature extraction.
-    pytorch_dummy   PyTorch model trained with Linear(37632→5) dummy extractor (1124_171024).
-    auto            Tries checkpoint first, then H5 fallback.
+Inference is fixed to the ``ckpt_final`` checkpoint model.
 """
 
 from __future__ import annotations
@@ -29,11 +22,8 @@ from .polyfacemodels2 import create_model_polyface3, wrap_polyface_tf
 
 __all__ = [
     "OCEAN_TRAITS",
-    "MODEL_REGISTRY",
     "predict_ocean",
     "get_model",
-    "get_available_models",
-    "get_model_display_name",
     "get_feature_extractor",
     "save_feature_extractor",
     "clear_model_cache",
@@ -68,83 +58,12 @@ NUM_TRAITS = len(OCEAN_TRAITS)
 POLYFACE_SEED = 42
 BACKBONE_WEIGHTS_FILE = os.path.join(BASE_DIR, "models", "polyface_backbone.pth")
 
-MODEL_REGISTRY: dict[str, dict[str, str]] = {
-    "auto": {
-        "type": "auto",
-        "display_name": "Auto (Checkpoint → H5)",
-    },
-    "ckpt_1127_145313": {
-        "type": "checkpoint",
-        "dir": "1127_145313",
-        "display_name": "Checkpoint - Adagrad (ALL)",
-    },
-    "ckpt_1208_153234": {
-        "type": "checkpoint",
-        "dir": "1208_153234",
-        "display_name": "Checkpoint - SGD (ALL)",
-    },
-    "ckpt_1214_094941": {
-        "type": "checkpoint",
-        "dir": "1214_094941",
-        "display_name": "Checkpoint - Adagrad (10k)",
-    },
-    "ckpt_1216_124129": {
-        "type": "checkpoint",
-        "dir": "1216_124129",
-        "display_name": "Checkpoint - 1216_124129",
-    },
-    "ckpt_1226_093721": {
-        "type": "checkpoint",
-        "dir": "1226_093721",
-        "display_name": "Checkpoint - 1226_093721",
-    },
-    "ckpt_1228_011726": {
-        "type": "checkpoint",
-        "dir": "1228_011726",
-        "display_name": "Checkpoint - RMSprop (ALL)",
-    },
-    "ckpt_1228_163427": {
-        "type": "checkpoint",
-        "dir": "1228_163427",
-        "display_name": "Checkpoint - Adam (ALL)",
-    },
-    "ckpt_1229_024515": {
-        "type": "checkpoint",
-        "dir": "1229_024515",
-        "display_name": "Checkpoint - 1229_024515",
-    },
-    "ckpt_1229_161540": {
-        "type": "checkpoint",
-        "dir": "1229_161540",
-        "display_name": "Checkpoint - NoOptimizer (10k)",
-    },
-    "ckpt_1230_222717": {
-        "type": "checkpoint",
-        "dir": "1230_222717",
-        "display_name": "Checkpoint - NoOptimizer (ALL)",
-    },
-    "ckpt_1124_171024": {
-        "type": "pytorch_dummy",
-        "dir": "1124_171024",
-        "display_name": "PyTorch - Adagrad (10k)",
-    },
-    "ckpt_final": {
-        "type": "pytorch_dummy",
-        "dir": "final",
-        "display_name": "PyTorch - Final Model",
-    },
-    "ckpt_final_mobile": {
-        "type": "pytorch_mobile",
-        "dir": "final_mobile",
-        "display_name": "PyTorch - Final (MobileNet backbone)",
-    },
-    "ckpt_final_2": {
-        "type": "pytorch_mobile_v2",
-        "dir": "final_2",
-        "display_name": "PyTorch - Final v2 (MobileNet)",
-    },
+FIXED_MODEL_KEY = "ckpt_final"
+FIXED_MODEL_SPEC = {
+    "type": "checkpoint",
+    "display_name": "Final Model",
 }
-DEFAULT_MODEL_KEY = "auto"
+FIXED_MODEL_DIR_CANDIDATES: tuple[str, ...] = ("final", "1127_145313")
 
 # ---------------------------------------------------------------------------
 # Runtime state
@@ -158,7 +77,6 @@ _feature_extractor: Optional[torch.nn.Module] = None
 # ===================================================================
 # TensorFlow / Keras helpers
 # ===================================================================
-
 
 def _build_keras_model() -> keras.Model:
     """Build the Keras OCEAN model: PolyFace (TF-wrapped) → LSTM → Dense.
@@ -231,44 +149,26 @@ def _load_checkpoint_weights(model: keras.Model, path: str) -> bool:
             logger.debug("Strategy '%s' failed: %s", label, exc)
     return False
 
-
-def _load_h5_model(path: str) -> Optional[keras.Model]:
-    """Load a Keras model from an ``.h5`` or ``.keras`` file."""
-    if not os.path.exists(path):
-        logger.warning("H5 file not found: %s", path)
-        return None
-
-    try:
-        from tensorflow.keras.layers import LSTM, Rescaling
-
-        class _CompatLSTM(LSTM):
-            """Drop ``time_major`` that older saves may include."""
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                kwargs.pop("time_major", None)
-                super().__init__(*args, **kwargs)
-
-            @classmethod
-            def from_config(cls, config: dict) -> _CompatLSTM:
-                cfg = dict(config)
-                cfg.pop("time_major", None)
-                return super().from_config(cfg)
-
-        model = tf.keras.models.load_model(
-            path,
-            custom_objects={"Rescaling": Rescaling, "LSTM": _CompatLSTM},
-            compile=False,
-        )
-        logger.info("H5 model loaded: %s", path)
-        return model
-    except Exception:
-        logger.exception("Failed to load H5 model from %s", path)
-        return None
-
-
 def _checkpoint_base_path(dir_name: str) -> str:
     """Return ``models/<dir>/polyface.t5`` if the directory exists."""
     return os.path.join(BASE_DIR, "models", dir_name, "polyface.t5")
+
+
+def _resolve_fixed_checkpoint_base_path() -> str:
+    """Resolve the fixed checkpoint base path from known candidate directories."""
+    for dir_name in FIXED_MODEL_DIR_CANDIDATES:
+        base_path = _checkpoint_base_path(dir_name)
+        ckpt_dir = os.path.dirname(base_path)
+        if os.path.isdir(ckpt_dir):
+            return base_path
+
+    candidate_dirs = ", ".join(
+        os.path.join(BASE_DIR, "models", d) for d in FIXED_MODEL_DIR_CANDIDATES
+    )
+    raise FileNotFoundError(
+        "No checkpoint directory found for fixed model. "
+        f"Checked: {candidate_dirs}"
+    )
 
 
 # ===================================================================
@@ -530,46 +430,6 @@ class TorchMobileOceanModelV2(torch.nn.Module):
         return torch.sigmoid(self.output_layer(x))
 
 
-def _load_mobile_v2_pytorch_model(dir_name: str) -> TorchMobileOceanModelV2:
-    """Load ``TorchMobileOceanModelV2`` (final_2 architecture) with strict=True."""
-    pth_path = _resolve_pth_path(dir_name)
-    saved = torch.load(pth_path, map_location=_device, weights_only=True)
-    if not isinstance(saved, (dict, OrderedDict)):
-        raise RuntimeError(f"Invalid weights format in '{pth_path}'")
-    model = TorchMobileOceanModelV2()
-    model.load_state_dict(saved, strict=True)
-    model.eval()
-    logger.info("MobileNetV2 OCEAN model loaded from: %s", pth_path)
-    return model.to(_device)
-
-
-def _load_mobile_pytorch_model(dir_name: str) -> TorchMobileOceanModel:
-    """Load ``TorchMobileOceanModel`` weights from a ``.pth`` file.
-
-    Only the projection layer and LSTM/Dense head are loaded from the
-    checkpoint; backbone weights are always the pretrained ImageNet ones.
-    """
-    pth_path = _resolve_pth_path(dir_name)
-    saved: dict[str, torch.Tensor] = torch.load(
-        pth_path, map_location=_device, weights_only=True,
-    )
-    model = TorchMobileOceanModel()
-
-    # Load compatible weights (proj + head), skip backbone keys
-    own_params = {k: v for k, v in model.named_parameters()}
-    compatible = {
-        k: v for k, v in saved.items()
-        if k in own_params and v.shape == own_params[k].shape
-    }
-    skipped = [k for k in saved if k not in compatible]
-    model.load_state_dict(compatible, strict=False)
-    logger.info(
-        "Mobile model: loaded %d/%d keys from %s (skipped: %s)",
-        len(compatible), len(saved), pth_path, skipped,
-    )
-    return model.to(_device).eval()
-
-
 def _resolve_pth_path(dir_name: str) -> str:
     """Find the ``.pth`` weights file inside a model directory."""
     model_dir = os.path.join(BASE_DIR, "models", dir_name)
@@ -582,25 +442,9 @@ def _resolve_pth_path(dir_name: str) -> str:
         f"Expected one of: polyface_final.pth, polyface_part2.pth, polyface.pth, polyface_final_2.pth"
     )
 
-
-def _load_dummy_pytorch_model(dir_name: str) -> TorchDummyOceanModel:
-    """Load ``TorchDummyOceanModel`` (1124_171024 architecture) from ``.pth``."""
-    pth_path = _resolve_pth_path(dir_name)
-    saved = torch.load(pth_path, map_location=_device, weights_only=True)
-    if not isinstance(saved, (dict, OrderedDict)):
-        raise RuntimeError(f"Invalid weights format in '{pth_path}'")
-
-    model = TorchDummyOceanModel()
-    model.load_state_dict(saved, strict=True)
-    model.eval()
-    logger.info("PyTorch dummy model loaded from: %s", pth_path)
-    return model.to(_device)
-
-
 # ===================================================================
 # Public API
 # ===================================================================
-
 
 def _create_seeded_polyface() -> torch.nn.Module:
     """Create a PolyFace model with deterministic weights.
@@ -636,7 +480,6 @@ def get_feature_extractor() -> torch.nn.Module:
         _feature_extractor = _create_seeded_polyface()
     return _feature_extractor
 
-
 def save_feature_extractor(path: Optional[str] = None) -> str:
     """Persist the current PolyFace backbone weights.
 
@@ -653,107 +496,38 @@ def save_feature_extractor(path: Optional[str] = None) -> str:
     logger.info("PolyFace backbone saved to %s", path)
     return path
 
-
-def get_model(
-    model_key: str = DEFAULT_MODEL_KEY,
-) -> Union[keras.Model, TorchOceanModel]:
-    """Load (or return cached) the OCEAN prediction model for *model_key*.
+def get_model() -> Union[keras.Model, TorchOceanModel]:
+    """Load (or return cached) the fixed OCEAN prediction model.
 
     Raises:
         RuntimeError: If the model cannot be loaded.
     """
-    if model_key not in MODEL_REGISTRY:
-        logger.warning("Unknown model_key '%s', falling back to '%s'", model_key, DEFAULT_MODEL_KEY)
-        model_key = DEFAULT_MODEL_KEY
-
+    model_key = FIXED_MODEL_KEY
     if model_key in _model_cache:
-        logger.info("Cache hit for model_key='%s'", model_key)
+        logger.info("Cache hit for fixed model '%s'", model_key)
         return _model_cache[model_key]
 
-    spec = MODEL_REGISTRY[model_key]
-    spec_type = spec["type"]
-    logger.info("Loading model_key='%s' (type='%s')", model_key, spec_type)
+    spec_type = FIXED_MODEL_SPEC["type"]
+    logger.info("Loading fixed model '%s' (type='%s')", model_key, spec_type)
 
     model: Optional[Union[keras.Model, TorchOceanModel]] = None
+    path: Optional[str] = None
 
-    if spec_type == "checkpoint":
-        base = _checkpoint_base_path(spec["dir"])
+    try:
+        base = _resolve_fixed_checkpoint_base_path()
         path = _resolve_checkpoint_path(base)
         model = _build_keras_model()
         if not _load_checkpoint_weights(model, path):
             raise RuntimeError(
                 f"Failed to load checkpoint for '{model_key}' from {path}"
             )
-
-    elif spec_type == "h5":
-        model = _load_h5_model(spec["path"])
-        if model is None:
-            raise RuntimeError(
-                f"Failed to load H5 model for '{model_key}' from {spec['path']}"
-            )
-
-    elif spec_type == "pytorch":
-        model = _load_pytorch_model(spec["dir"])
-
-    elif spec_type == "pytorch_dummy":
-        model = _load_dummy_pytorch_model(spec["dir"])
-
-    elif spec_type == "pytorch_mobile":
-        model = _load_mobile_pytorch_model(spec["dir"])
-
-    elif spec_type == "pytorch_mobile_v2":
-        model = _load_mobile_v2_pytorch_model(spec["dir"])
-
-    elif spec_type == "auto":
-        model = _try_auto_load()
-
-    else:
-        raise RuntimeError(f"Unknown model type '{spec_type}' for '{model_key}'")
-
-    if model is None:
-        raise RuntimeError(f"Model loading returned None for '{model_key}'")
-
-    _model_cache[model_key] = model
-    logger.info("Model '%s' ready", model_key)
-    return model
-
-
-def _try_auto_load() -> Union[keras.Model, TorchOceanModel]:
-    """Auto selection: checkpoint → H5 fallback."""
-    # 1) checkpoint
-    try:
-        ckpt_dir = MODEL_REGISTRY["ckpt_1127_145313"]["dir"]
-        base = _checkpoint_base_path(ckpt_dir)
-        path = _resolve_checkpoint_path(base)
-        model = _build_keras_model()
-        if _load_checkpoint_weights(model, path):
-            logger.info("Auto → checkpoint: %s", path)
-            return model
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Auto checkpoint failed: %s", exc)
-
-    # 2) H5
-    if "h5_adagrad" in MODEL_REGISTRY:
-        h5_path = MODEL_REGISTRY["h5_adagrad"]["path"]
-        model = _load_h5_model(h5_path)
-        if model is not None:
-            logger.info("Auto → H5: %s", h5_path)
-            return model
-
-    raise RuntimeError("Auto model selection exhausted all options")
-
-
-def get_model_display_name(model_key: str) -> str:
-    """Human-readable display name for *model_key*."""
-    spec = MODEL_REGISTRY.get(model_key)
-    if spec and "display_name" in spec:
-        return spec["display_name"]
-    return model_key
-
-
-def get_available_models() -> dict[str, str]:
-    """Map of ``model_key → display_name`` for every registered model."""
-    return {k: v.get("display_name", k) for k, v in MODEL_REGISTRY.items()}
+        _model_cache[model_key] = model
+        logger.info("Model '%s' ready", model_key)
+        return model
+    except Exception as exc:
+        logger.exception("Failed to load fixed model '%s'", model_key)
+        path_desc = path if path is not None else "<checkpoint path unresolved>"
+        raise RuntimeError(f"Failed to load fixed model '{model_key}' from {path_desc}") from exc
 
 
 def clear_model_cache() -> None:
@@ -803,13 +577,11 @@ def preprocess(frames: np.ndarray) -> np.ndarray:
 
 def predict_ocean(
     frames: np.ndarray,
-    model_key: str = DEFAULT_MODEL_KEY,
 ) -> dict[str, float]:
     """Predict OCEAN personality traits from video frames.
 
     Args:
         frames: ``(10, 112, 112, 3)`` or ``(B, 10, 112, 112, 3)``.
-        model_key: Key in ``MODEL_REGISTRY``.
 
     Returns:
         ``{trait_name: score_0_to_100}`` rounded to two decimals.
@@ -817,12 +589,12 @@ def predict_ocean(
     Raises:
         RuntimeError: On prediction failure.
     """
-    model = get_model(model_key=model_key)
+    model = get_model()
     preprocessed = preprocess(frames)
 
     logger.info(
-        "Predicting: model_key='%s', input_shape=%s, input_hash=%d",
-        model_key,
+        "Predicting with fixed model '%s': input_shape=%s, input_hash=%d",
+        FIXED_MODEL_KEY,
         preprocessed.shape,
         hash(preprocessed.tobytes()[:1024]),
     )
