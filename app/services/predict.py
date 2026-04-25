@@ -10,7 +10,7 @@ import logging
 import os
 import re
 from collections import OrderedDict
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -65,6 +65,9 @@ FIXED_MODEL_SPEC = {
     "display_name": "Final Model",
 }
 
+FIXED_CHECKPOINT_BASE_PATH = os.path.join(
+    BASE_DIR, "models", "1127_145313", "polyface.t5"
+)
 FIXED_PTH_PATH = os.path.join(
     BASE_DIR, "models", "final", "polyface_backboned_final_adagrad.pth"
 )
@@ -412,9 +415,140 @@ class TorchMobileOceanModelV2(torch.nn.Module):
         return torch.sigmoid(self.output_layer(x))
 
 
+class PolyFaceOceanModel(torch.nn.Module):
+    """Training-compatible PolyFace -> LSTM -> FC OCEAN model.
+
+    Mirrors the architecture provided from training code so state_dict keys
+    line up (`polyface.*`, `lstm1.*`, `lstm2.*`, `fc1.*`, ...).
+    """
+
+    def __init__(
+        self,
+        polyface_pytorch_layer: torch.nn.Module,
+        polyface_out_features: int,
+        freeze_polyface: bool = False,
+    ) -> None:
+        super().__init__()
+        self.polyface = polyface_pytorch_layer
+        self.freeze_polyface = freeze_polyface
+        self.lstm1 = torch.nn.LSTM(
+            input_size=polyface_out_features, hidden_size=128, batch_first=True
+        )
+        self.lstm2 = torch.nn.LSTM(input_size=128, hidden_size=64, batch_first=True)
+        self.dropout1 = torch.nn.Dropout(0.2)
+        self.fc1 = torch.nn.Linear(64, 1024)
+        self.fc2 = torch.nn.Linear(1024, 512)
+        self.fc3 = torch.nn.Linear(512, 256)
+        self.dropout2 = torch.nn.Dropout(0.5)
+        self.output_layer = torch.nn.Linear(256, NUM_TRAITS)
+
+    def _polyface_forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.freeze_polyface:
+            self.polyface.eval()
+            with torch.no_grad():
+                out = self.polyface(x)
+        else:
+            out = self.polyface(x)
+
+        # Some PolyFace implementations return dicts, use feature vector.
+        if isinstance(out, dict):
+            if "feature" in out:
+                return out["feature"]
+            first_tensor = next((v for v in out.values() if torch.is_tensor(v)), None)
+            if first_tensor is not None:
+                return first_tensor
+            raise RuntimeError("PolyFace output dict has no tensor values")
+        return out
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Accept both (B,T,C,H,W) and (B,T,H,W,C)
+        if x.ndim != 5:
+            raise ValueError(f"Expected 5D tensor, got shape {tuple(x.shape)}")
+        if x.shape[-1] == NUM_CHANNELS:
+            x = x.permute(0, 1, 4, 2, 3).contiguous()
+
+        batch_size, seq_len, c, h, w = x.size()
+        x = x.reshape(batch_size * seq_len, c, h, w)
+
+        if isinstance(self.polyface, torch.nn.Linear):
+            x = x.reshape(batch_size * seq_len, -1)
+
+        x = self._polyface_forward(x)
+        x = x.reshape(batch_size, seq_len, -1)
+
+        x, _ = self.lstm1(x)
+        x, _ = self.lstm2(x)
+        x = x[:, -1, :]
+        x = self.dropout1(x)
+        x = self.fc1(x)
+        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.fc3(x))
+        x = self.dropout2(x)
+        x = self.output_layer(x)
+        return torch.sigmoid(x)
+
+
 def apolynetmodel() -> torch.nn.Module:
     """Build the PyTorch architecture used by final PolyFace state_dict weights."""
-    return TorchMobileOceanModelV2()
+    return PolyFaceOceanModel(
+        polyface_pytorch_layer=create_model_polyface3(),
+        polyface_out_features=POLYFACE_FEATURE_DIM,
+        freeze_polyface=False,
+    )
+
+
+def _normalize_state_dict_keys(state_dict: dict[str, Any]) -> OrderedDict[str, Any]:
+    """Normalize common training-time key prefixes before loading weights."""
+    normalized: OrderedDict[str, Any] = OrderedDict()
+    for key, value in state_dict.items():
+        norm_key = key
+        for prefix in ("module.", "model."):
+            if norm_key.startswith(prefix):
+                norm_key = norm_key[len(prefix):]
+        normalized[norm_key] = value
+    return normalized
+
+
+def _extract_state_dict(obj: Any) -> dict[str, Any]:
+    """Extract state_dict from common checkpoint payload formats."""
+    if isinstance(obj, dict):
+        if "state_dict" in obj and isinstance(obj["state_dict"], dict):
+            return obj["state_dict"]
+        if "model_state_dict" in obj and isinstance(obj["model_state_dict"], dict):
+            return obj["model_state_dict"]
+        # Raw state_dict payload
+        if obj and all(isinstance(k, str) for k in obj.keys()):
+            return obj
+    raise RuntimeError("Unsupported .pth payload format; expected state_dict or {'state_dict': ...}.")
+
+
+def _load_pth_with_architecture_match(path: str) -> torch.nn.Module:
+    """Load .pth by trying known model architectures with strict key matching."""
+    raw_obj = torch.load(path, map_location=_device, weights_only=True)
+    state = _normalize_state_dict_keys(_extract_state_dict(raw_obj))
+
+    candidates: list[tuple[str, Callable[[], torch.nn.Module]]] = [
+        ("apolynetmodel", apolynetmodel),
+        ("TorchOceanModel", lambda: TorchOceanModel(get_feature_extractor(), _device)),
+        ("TorchMobileOceanModel", TorchMobileOceanModel),
+        ("TorchDummyOceanModel", TorchDummyOceanModel),
+    ]
+
+    errors: list[str] = []
+    for name, factory in candidates:
+        try:
+            model = factory()
+            model.load_state_dict(state, strict=True)
+            model = model.to(_device).eval()
+            logger.info("Loaded .pth with architecture '%s'", name)
+            return model
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+
+    raise RuntimeError(
+        "No compatible architecture matched state_dict. Tried: "
+        + " | ".join(errors)
+    )
 
 
 def _resolve_pth_path(dir_name: str) -> str:
@@ -501,18 +635,34 @@ def get_model() -> Union[keras.Model, TorchOceanModel, torch.nn.Module]:
     path: Optional[str] = None
 
     try:
-        path = FIXED_PTH_PATH
-        model = apolynetmodel()
-        state = torch.load(path, map_location=_device, weights_only=True)
-        model.load_state_dict(state)
-        model = model.to(_device).eval()
+        # Prefer local .pth if present, otherwise use TF checkpoint
+        if os.path.exists(FIXED_PTH_PATH):
+            path = FIXED_PTH_PATH
+            model = _load_pth_with_architecture_match(path)
+            _model_cache[model_key] = model
+            logger.info("Model '%s' ready from .pth: %s", model_key, path)
+            return model
+
+        logger.info(
+            ".pth not found at '%s', falling back to TF checkpoint",
+            FIXED_PTH_PATH,
+        )
+        path = _resolve_checkpoint_path(FIXED_CHECKPOINT_BASE_PATH)
+        model = _build_keras_model()
+        if not _load_checkpoint_weights(model, path):
+            raise RuntimeError(
+                f"Failed to load checkpoint for '{model_key}' from {path}"
+            )
         _model_cache[model_key] = model
-        logger.info("Model '%s' ready", model_key)
+        logger.info("Model '%s' ready from checkpoint: %s", model_key, path)
         return model
     except Exception as exc:
         logger.exception("Failed to load fixed model '%s'", model_key)
         path_desc = path if path is not None else "<checkpoint path unresolved>"
-        raise RuntimeError(f"Failed to load fixed model '{model_key}' from {path_desc}") from exc
+        raise RuntimeError(
+            f"Failed to load fixed model '{model_key}' from {path_desc}. "
+            f"Cause: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def clear_model_cache() -> None:
@@ -562,11 +712,14 @@ def preprocess(frames: np.ndarray) -> np.ndarray:
 
 def predict_ocean(
     frames: np.ndarray,
+    model_key: Optional[str] = None,
 ) -> dict[str, float]:
     """Predict OCEAN personality traits from video frames.
 
     Args:
         frames: ``(10, 112, 112, 3)`` or ``(B, 10, 112, 112, 3)``.
+        model_key: Optional request model key. Currently ignored because
+            inference is fixed to ``FIXED_MODEL_KEY``.
 
     Returns:
         ``{trait_name: score_0_to_100}`` rounded to two decimals.
@@ -574,6 +727,13 @@ def predict_ocean(
     Raises:
         RuntimeError: On prediction failure.
     """
+    if model_key is not None and model_key != FIXED_MODEL_KEY:
+        logger.info(
+            "Ignoring requested model_key '%s'; using fixed model '%s'",
+            model_key,
+            FIXED_MODEL_KEY,
+        )
+
     model = get_model()
     preprocessed = preprocess(frames)
 
