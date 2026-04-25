@@ -24,6 +24,7 @@ __all__ = [
     "OCEAN_TRAITS",
     "predict_ocean",
     "get_model",
+    "apolynetmodel",
     "get_feature_extractor",
     "save_feature_extractor",
     "clear_model_cache",
@@ -56,14 +57,17 @@ NUM_TRAITS = len(OCEAN_TRAITS)
 # inference.  Without this, every ``create_model_polyface3()`` call produces a
 # different random backbone and trained LSTM/Dense weights become useless.
 POLYFACE_SEED = 42
-BACKBONE_WEIGHTS_FILE = os.path.join(BASE_DIR, "models", "polyface_backbone.pth")
+BACKBONE_WEIGHTS_FILE = os.path.join(BASE_DIR, "models", "polyface_backbone_final_adagrad.pth")
 
 FIXED_MODEL_KEY = "ckpt_final"
 FIXED_MODEL_SPEC = {
     "type": "checkpoint",
     "display_name": "Final Model",
 }
-FIXED_MODEL_DIR_CANDIDATES: tuple[str, ...] = ("final", "1127_145313")
+
+FIXED_PTH_PATH = os.path.join(
+    BASE_DIR, "models", "final", "polyface_backboned_final_adagrad.pth"
+)
 
 # ---------------------------------------------------------------------------
 # Runtime state
@@ -148,28 +152,6 @@ def _load_checkpoint_weights(model: keras.Model, path: str) -> bool:
         except Exception as exc:  # noqa: BLE001
             logger.debug("Strategy '%s' failed: %s", label, exc)
     return False
-
-def _checkpoint_base_path(dir_name: str) -> str:
-    """Return ``models/<dir>/polyface.t5`` if the directory exists."""
-    return os.path.join(BASE_DIR, "models", dir_name, "polyface.t5")
-
-
-def _resolve_fixed_checkpoint_base_path() -> str:
-    """Resolve the fixed checkpoint base path from known candidate directories."""
-    for dir_name in FIXED_MODEL_DIR_CANDIDATES:
-        base_path = _checkpoint_base_path(dir_name)
-        ckpt_dir = os.path.dirname(base_path)
-        if os.path.isdir(ckpt_dir):
-            return base_path
-
-    candidate_dirs = ", ".join(
-        os.path.join(BASE_DIR, "models", d) for d in FIXED_MODEL_DIR_CANDIDATES
-    )
-    raise FileNotFoundError(
-        "No checkpoint directory found for fixed model. "
-        f"Checked: {candidate_dirs}"
-    )
-
 
 # ===================================================================
 # PyTorch model
@@ -430,6 +412,11 @@ class TorchMobileOceanModelV2(torch.nn.Module):
         return torch.sigmoid(self.output_layer(x))
 
 
+def apolynetmodel() -> torch.nn.Module:
+    """Build the PyTorch architecture used by final PolyFace state_dict weights."""
+    return TorchMobileOceanModelV2()
+
+
 def _resolve_pth_path(dir_name: str) -> str:
     """Find the ``.pth`` weights file inside a model directory."""
     model_dir = os.path.join(BASE_DIR, "models", dir_name)
@@ -496,7 +483,7 @@ def save_feature_extractor(path: Optional[str] = None) -> str:
     logger.info("PolyFace backbone saved to %s", path)
     return path
 
-def get_model() -> Union[keras.Model, TorchOceanModel]:
+def get_model() -> Union[keras.Model, TorchOceanModel, torch.nn.Module]:
     """Load (or return cached) the fixed OCEAN prediction model.
 
     Raises:
@@ -510,17 +497,15 @@ def get_model() -> Union[keras.Model, TorchOceanModel]:
     spec_type = FIXED_MODEL_SPEC["type"]
     logger.info("Loading fixed model '%s' (type='%s')", model_key, spec_type)
 
-    model: Optional[Union[keras.Model, TorchOceanModel]] = None
+    model: Optional[Union[keras.Model, TorchOceanModel, torch.nn.Module]] = None
     path: Optional[str] = None
 
     try:
-        base = _resolve_fixed_checkpoint_base_path()
-        path = _resolve_checkpoint_path(base)
-        model = _build_keras_model()
-        if not _load_checkpoint_weights(model, path):
-            raise RuntimeError(
-                f"Failed to load checkpoint for '{model_key}' from {path}"
-            )
+        path = FIXED_PTH_PATH
+        model = apolynetmodel()
+        state = torch.load(path, map_location=_device, weights_only=True)
+        model.load_state_dict(state)
+        model = model.to(_device).eval()
         _model_cache[model_key] = model
         logger.info("Model '%s' ready", model_key)
         return model
