@@ -10,7 +10,7 @@ from .insights import generate_ocean_insights, get_insight_for_detection
 from .models import Detection, User
 from .pdf_generator import generate_pdf_report
 from .schemas import DetectionSchema
-from .services.predict import predict_ocean, get_available_models
+from .services.predict import predict_ocean
 
 detection_schema = DetectionSchema()
 
@@ -115,15 +115,19 @@ def predict():
     return jsonify(detection)
 
 
-@bp.route("/models", methods=["GET"])
-@jwt_required()
-def get_models():
-    """Get available models with their display names."""
-    try:
-        models = get_available_models()
-        return jsonify(models)
-    except Exception as e:
-        return jsonify({"error": f"Could not retrieve models: {e}"}), 500
+# @bp.route("/models", methods=["GET"])
+# @jwt_required()
+# def get_models():
+#     """Get available models with their display names."""
+#     try:
+#         models = [
+#             {"key": "auto", "name": "Auto"},
+#             {"key": "mobile", "name": "Mobile"},
+#             {"key": "mobile_v2", "name": "Mobile V2"},
+#         ]
+#         return jsonify(models)
+#     except Exception as e:
+#         return jsonify({"error": f"Could not retrieve models: {e}"}), 500
 
 
 @bp.route("/history", methods=["GET"])
