@@ -73,7 +73,7 @@ def predict():
         frames = frames.astype("float32") / 255.0
 
         try:
-            scores = predict_ocean(frames, model_key=model_key)
+            scores = predict_ocean(frames)
         except Exception as e:
             return jsonify({"error": f"Predict failed: {e}"}), 500
 
@@ -113,22 +113,6 @@ def predict():
     detection["results"] = results_data
 
     return jsonify(detection)
-
-
-# @bp.route("/models", methods=["GET"])
-# @jwt_required()
-# def get_models():
-#     """Get available models with their display names."""
-#     try:
-#         models = [
-#             {"key": "auto", "name": "Auto"},
-#             {"key": "mobile", "name": "Mobile"},
-#             {"key": "mobile_v2", "name": "Mobile V2"},
-#         ]
-#         return jsonify(models)
-#     except Exception as e:
-#         return jsonify({"error": f"Could not retrieve models: {e}"}), 500
-
 
 @bp.route("/history", methods=["GET"])
 @jwt_required()
