@@ -73,7 +73,7 @@ def predict():
         frames = frames.astype("float32") / 255.0
 
         try:
-            scores = predict_ocean(frames, model_key=model_key)
+            scores = predict_ocean(frames)
         except Exception as e:
             return jsonify({"error": f"Predict failed: {e}"}), 500
 
