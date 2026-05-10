@@ -114,22 +114,6 @@ def predict():
 
     return jsonify(detection)
 
-
-# @bp.route("/models", methods=["GET"])
-# @jwt_required()
-# def get_models():
-#     """Get available models with their display names."""
-#     try:
-#         models = [
-#             {"key": "auto", "name": "Auto"},
-#             {"key": "mobile", "name": "Mobile"},
-#             {"key": "mobile_v2", "name": "Mobile V2"},
-#         ]
-#         return jsonify(models)
-#     except Exception as e:
-#         return jsonify({"error": f"Could not retrieve models: {e}"}), 500
-
-
 @bp.route("/history", methods=["GET"])
 @jwt_required()
 def get_history():
