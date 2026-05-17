@@ -10,6 +10,8 @@ import numpy as np
 import torch
 import torchvision.models as tv_models
 
+from app.services.polyfacemodels2 import create_model_polyface3
+
 __all__ = ["OCEAN_TRAITS", "predict_ocean", "clear_model_cache"]
 
 logger = logging.getLogger(__name__)
@@ -36,14 +38,25 @@ _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _model_cache: dict[str, Any] = {}
 
 
-class TorchMobileOceanModelV2(torch.nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        base = tv_models.mobilenet_v2(weights=tv_models.MobileNet_V2_Weights.IMAGENET1K_V1)
-        base.classifier = torch.nn.Linear(1280, POLYFACE_FEATURE_DIM)
-        self.polyface = base
+class PolyFaceOceanModel(torch.nn.Module):
+    """Training-compatible PolyFace -> LSTM -> FC OCEAN model.
 
-        self.lstm1 = torch.nn.LSTM(input_size=POLYFACE_FEATURE_DIM, hidden_size=128, batch_first=True)
+    Mirrors the architecture provided from training code so state_dict keys
+    line up (`polyface.*`, `lstm1.*`, `lstm2.*`, `fc1.*`, ...).
+    """
+
+    def __init__(
+        self,
+        polyface_pytorch_layer: torch.nn.Module,
+        polyface_out_features: int,
+        freeze_polyface: bool = False,
+    ) -> None:
+        super().__init__()
+        self.polyface = polyface_pytorch_layer
+        self.freeze_polyface = freeze_polyface
+        self.lstm1 = torch.nn.LSTM(
+            input_size=polyface_out_features, hidden_size=128, batch_first=True
+        )
         self.lstm2 = torch.nn.LSTM(input_size=128, hidden_size=64, batch_first=True)
         self.dropout1 = torch.nn.Dropout(0.2)
         self.fc1 = torch.nn.Linear(64, 1024)
@@ -52,22 +65,44 @@ class TorchMobileOceanModelV2(torch.nn.Module):
         self.dropout2 = torch.nn.Dropout(0.5)
         self.output_layer = torch.nn.Linear(256, NUM_TRAITS)
 
-    def _extract_features(self, frames: torch.Tensor) -> torch.Tensor:
-        batch, n_frames, h, w, c = frames.shape
-        flat = frames.reshape(batch * n_frames, h, w, c).permute(0, 3, 1, 2)
-        mean = torch.tensor([0.485, 0.456, 0.406], device=flat.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=flat.device).view(1, 3, 1, 1)
-        flat = (flat - mean) / std
+    def _polyface_forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.freeze_polyface:
+            self.polyface.eval()
+            with torch.no_grad():
+                out = self.polyface(x)
+        else:
+            out = self.polyface(x)
 
-        feats = self.polyface.features(flat)
-        feats = torch.nn.functional.adaptive_avg_pool2d(feats, 1)
-        feats = feats.flatten(1)
-        feats = torch.relu(self.polyface.classifier(feats))
-        return feats.reshape(batch, n_frames, POLYFACE_FEATURE_DIM)
+        # Some PolyFace implementations return dicts, use feature vector.
+        if isinstance(out, dict):
+            if "feature" in out:
+                return out["feature"]
+            first_tensor = next((v for v in out.values() if torch.is_tensor(v)), None)
+            if first_tensor is not None:
+                return first_tensor
+            raise RuntimeError("PolyFace output dict has no tensor values")
+        return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        features = self._extract_features(x)
-        x, _ = self.lstm1(features)
+        # Accept both (B,T,C,H,W) and (B,T,H,W,C)
+        if x.ndim != 5:
+            raise ValueError(f"Expected 5D tensor, got shape {tuple(x.shape)}")
+        if x.shape[-1] == NUM_CHANNELS:
+            x = x.permute(0, 1, 4, 2, 3).contiguous()
+
+        batch_size, seq_len, c, h, w = x.size()
+        x = x.reshape(batch_size * seq_len, c, h, w)
+
+        if isinstance(self.polyface, torch.nn.Linear):
+            x = x.reshape(batch_size * seq_len, -1)
+        else:
+            if torch.is_floating_point(x) and torch.max(x) <= 1.0:
+                x = x * 255.0
+            x = torch.clamp(x, 0.0, 255.0)
+        x = self._polyface_forward(x)
+        x = x.reshape(batch_size, seq_len, -1)
+
+        x, _ = self.lstm1(x)
         x, _ = self.lstm2(x)
         x = x[:, -1, :]
         x = self.dropout1(x)
@@ -75,7 +110,17 @@ class TorchMobileOceanModelV2(torch.nn.Module):
         x = torch.relu(self.fc2(x))
         x = torch.relu(self.fc3(x))
         x = self.dropout2(x)
-        return torch.sigmoid(self.output_layer(x))
+        x = self.output_layer(x)
+        return torch.sigmoid(x)
+
+
+def apolynetmodel() -> torch.nn.Module:
+    """Build the PyTorch architecture used by final PolyFace state_dict weights."""
+    return PolyFaceOceanModel(
+        polyface_pytorch_layer=create_model_polyface3(),
+        polyface_out_features=POLYFACE_FEATURE_DIM,
+        freeze_polyface=False,
+    )
 
 
 def _get_model() -> torch.nn.Module:
@@ -85,7 +130,7 @@ def _get_model() -> torch.nn.Module:
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
 
-    model = TorchMobileOceanModelV2()
+    model = apolynetmodel()
     state = torch.load(MODEL_PATH, map_location=_device, weights_only=True)
     model.load_state_dict(state)
     model = model.to(_device).eval()
