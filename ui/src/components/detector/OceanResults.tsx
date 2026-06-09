@@ -4,7 +4,7 @@
  * Displays the OCEAN personality detection results with visual bars and insights.
  */
 
-import { Download, TrendingUp, FileText } from "lucide-react";
+import { Download, TrendingUp, FileText, AlertTriangle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,6 @@ import { Progress } from "@/components/ui/progress";
 import {
   TRAIT_CONFIG,
   TRAIT_KEYS,
-  getScoreLevelLabel,
-  getScoreLevelColor,
 } from "@/lib/constants";
 import { downloadReport, OceanScores } from "@/lib/hooks";
 import { useDetectionInsights } from "@/lib";
@@ -29,6 +27,12 @@ const TRAIT_ICONS = {
   neuroticism: Brain,
 } as const;
 
+type TraitStatus = "high" | "low";
+
+function getTraitStatus(value: number): TraitStatus {
+  return value > 50 ? "high" : "low";
+}
+
 interface OceanResultsProps {
   results: OceanScores;
   detectionId: number;
@@ -37,6 +41,7 @@ interface OceanResultsProps {
 export function OceanResults({ results, detectionId }: OceanResultsProps) {
   const { data: insightsData, isLoading: insightsLoading, isError: insightsError } = useDetectionInsights(detectionId);
   const summary = insightsData?.insights?.summary;
+
   return (
     <Card className="border-0 shadow-lg bg-white/70 backdrop-blur">
       <CardHeader>
@@ -118,6 +123,8 @@ function TraitResultItem({
   bgColor,
   icon: Icon,
 }: TraitResultItemProps) {
+  const status = getTraitStatus(value);
+
   return (
     <div className={`p-4 rounded-xl ${bgColor} border border-gray-200`}>
       <div className="flex items-center justify-between mb-3">
@@ -130,10 +137,21 @@ function TraitResultItem({
             <p className="text-xs text-gray-600">{description}</p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <div className={`text-2xl font-bold ${textColor}`}>{value}%</div>
-          <Badge className={`text-xs ${getScoreLevelColor(value)} border-0`}>
-            {getScoreLevelLabel(value)}
+          <Badge
+            className={`text-xs border-0 ${
+              status === "high"
+                ? "bg-red-100 text-red-700"
+                : "bg-green-100 text-green-700"
+            }`}
+          >
+            {status === "high" ? (
+              <AlertTriangle className="w-3 h-3 mr-1 inline" />
+            ) : (
+              <CheckCircle className="w-3 h-3 mr-1 inline" />
+            )}
+            {status === "high" ? "High" : "Low"}
           </Badge>
         </div>
       </div>
