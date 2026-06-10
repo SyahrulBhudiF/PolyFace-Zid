@@ -3,7 +3,7 @@
 // =============================================================================
 
 export interface InsightResult {
-  level: "high" | "medium" | "low";
+  level: "high"|"low";
   title: string;
   description: string;
   characteristics: string[];

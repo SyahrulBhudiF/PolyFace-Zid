@@ -76,37 +76,28 @@ export const TRAIT_KEYS = Object.keys(TRAIT_CONFIG) as Array<
 >;
 
 export const SCORE_THRESHOLDS = {
-  high: 60,
-  medium: 40,
+  high: 50,
 } as const;
 
-export type ScoreLevel = "high" | "medium" | "low";
+export type ScoreLevel = "high" | "low";
 
 export function getScoreLevel(score: number): ScoreLevel {
   if (score >= SCORE_THRESHOLDS.high) return "high";
-  if (score >= SCORE_THRESHOLDS.medium) return "medium";
   return "low";
 }
 
 export function getScoreLevelLabel(score: number): string {
-  if (score >= 80) return "Very High";
-  if (score >= 60) return "High";
-  if (score >= 40) return "Moderate";
-  if (score >= 20) return "Low";
-  return "Very Low";
+  if (score >= 50) return "High";
+  return "Low";
 }
 
 export function getScoreLevelColor(score: number): string {
-  if (score >= 80) return "bg-green-100 text-green-800";
-  if (score >= 60) return "bg-blue-100 text-blue-800";
-  if (score >= 40) return "bg-yellow-100 text-yellow-800";
-  if (score >= 20) return "bg-orange-100 text-orange-800";
+  if (score >= 50) return "bg-green-100 text-green-800";
   return "bg-red-100 text-red-800";
 }
 
 export const LEVEL_BADGE_STYLES: Record<ScoreLevel, string> = {
   high: "bg-green-100 text-green-700 border-green-300",
-  medium: "bg-yellow-100 text-yellow-700 border-yellow-300",
   low: "bg-red-100 text-red-700 border-red-300",
 } as const;
 
