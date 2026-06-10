@@ -167,7 +167,7 @@ def generate_pdf_report(
     story.append(Paragraph("Informasi Profil", st["section"]))
 
     utc7 = timezone(timedelta(hours=7))
-    created_at = getattr(detection, "created_at", datetime.now(utc7).astimezone(utc7))
+    created_at = getattr(detection, "created_at", datetime.now(utc7))
     date_str = created_at.strftime("%d %B %Y, %H:%M")
 
     info = [
@@ -175,8 +175,7 @@ def generate_pdf_report(
         ["Usia", f"{detection.age} tahun"],
         ["Gender", str(detection.gender).capitalize()],
         ["Nama Akun", user_name],
-        ["Email", user_email],
-        ["Tanggal", date_str],
+        ["Email", user_email]
     ]
 
     info_table = Table(info, colWidths=[100, doc.width - 100])
