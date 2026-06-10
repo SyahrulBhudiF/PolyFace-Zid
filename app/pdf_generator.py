@@ -1,5 +1,5 @@
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from reportlab.lib import colors
@@ -166,7 +166,8 @@ def generate_pdf_report(
     # ================= PROFILE CARD =================
     story.append(Paragraph("Informasi Profil", st["section"]))
 
-    created_at = getattr(detection, "created_at", datetime.now())
+    utc7 = timezone(timedelta(hours=7))
+    created_at = getattr(detection, "created_at", datetime.now(utc7).astimezone(utc7))
     date_str = created_at.strftime("%d %B %Y, %H:%M")
 
     info = [
