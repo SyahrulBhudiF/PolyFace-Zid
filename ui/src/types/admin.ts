@@ -109,7 +109,6 @@ export interface StatisticsOverview {
 
 export interface ScoreDistribution {
   high: number;
-  medium: number;
   low: number;
 }
 
