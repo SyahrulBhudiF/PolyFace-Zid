@@ -1,0 +1,36 @@
+[project]
+name = "OCEAN"
+version = "0.1.0"
+description = "Flask API with ML, Face Recognition, and Reporting"
+requires-python = ">=3.10,<3.11"
+
+dependencies = [
+    # Flask & backend
+    "flask",
+    "flask-sqlalchemy",
+    "flask-migrate",
+    "flask-jwt-extended",
+    "flask-bcrypt",
+    "flask-cors",
+    "python-dotenv",
+    "pymysql",
+    "cryptography",
+    "ipykernel",
+    # Serialization / validation
+    "marshmallow",
+    "marshmallow-sqlalchemy",
+    # Data & utilities
+    "numpy",
+    "pandas",
+    "reportlab",
+    # Computer vision & face recognition
+    "opencv-python",
+    "mtcnn",
+    "keras-applications",
+    # ML / DL
+    "tensorflow",
+    "torch",
+    "torchsummary",
+    "transformers",
+    "sentencepiece",
+]

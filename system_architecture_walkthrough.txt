@@ -1,0 +1,206 @@
+ALUR KERJA DAN STRUKTUR SISTEM - OCEAN PERSONALITY WEB SYSTEM
+
+Dokumen ini menjelaskan arsitektur sistem, alur eksekusi kode, pemuatan model deep learning, ekstraksi frame video, setup rute (routing), dan fitur administrasi serta cetak laporan PDF pada sistem deteksi kepribadian OCEAN (Big Five Personality).
+
+========================================================================
+1. STRUKTUR PROYEK (PROJECT STRUCTURE)
+========================================================================
+
+Secara garis besar, proyek ini terbagi menjadi dua bagian utama: Backend menggunakan Flask (Python) dan Frontend menggunakan React + Vite + TanStack Router (TypeScript).
+
+A. Backend (app/)
+* app/__init__.py: Flask Application Factory yang menginisialisasi ekstensi (SQLAlchemy untuk database, Flask-Migrate untuk migrasi skema database, JWTManager untuk token otentikasi) dan meregistrasi Blueprint untuk rute.
+* app/wsgi.py: Entry point WSGI untuk menjalankan server lokal Flask pada port 5000.
+* app/config.py: File konfigurasi utama sistem, menyimpan database URI, JWT secret keys, threshold kepribadian OCEAN, jumlah frame video (10), dan resolusi target frame (112x112).
+* app/models.py: Definisi skema database:
+  - User: Menyimpan data akun pengguna (name, email, password, dan role [admin/user]).
+  - Detection: Menyimpan hasil deteksi kepribadian per upload video (name, age, gender, image_path, serta skor 5 dimensi OCEAN).
+* app/routes.py: Mengontrol rute utama aplikasi seperti deteksi baru (/predict), riwayat deteksi (/history), detail deteksi, serta unduhan/cetak laporan PDF.
+* app/auth.py: Mengontrol rute registrasi, login, autentikasi profil, dan logout berbasis JWT HttpOnly cookie.
+* app/admin.py: Rute khusus administrator untuk mengelola pengguna, melihat statistik performa/timeline sistem, dan mengelola seluruh riwayat deteksi.
+* app/pdf_generator.py: Generator PDF berbasis ReportLab untuk menyusun berkas laporan PDF hasil deteksi secara rapi dan profesional.
+* app/insights.py: Logika penentuan level OCEAN (Low/Medium/High) dan pembentukan narasi kepribadian serta rekomendasi tindakan berdasarkan skor.
+* app/services/predict.py: Layanan pemrosesan prediksi OCEAN yang membungkus arsitektur model PyTorch (PolyFaceOceanModel) dan menyelaraskan input video.
+* app/services/polyfacemodels2.py: File backbone pengenal wajah (create_model_polyface3 / APolynet).
+* app/utils_extract.py: Script helper opsional/deteksi mandiri untuk crop wajah menggunakan MTCNN dan OpenCV.
+
+B. Frontend (ui/)
+* ui/src/router.tsx: Pengaturan rute frontend menggunakan @tanstack/react-router, lengkap dengan pembatas rute (ProtectedRoute, GuestRoute, dan AdminRoute).
+* ui/src/pages/: File halaman utama: Detector.tsx (antarmuka deteksi utama), Login.tsx, Register.tsx, dan admin/AdminDashboard.tsx (dashboard admin).
+* ui/src/stores/auth.ts: Store Zustand untuk manajemen state login pengguna secara global.
+
+
+========================================================================
+2. KONFIGURASI SISTEM & INISIALISASI
+========================================================================
+
+1. Konfigurasi: Dimuat dari app/config.py melalui kelas Config. Beberapa variabel kunci meliputi:
+   * SQLALCHEMY_DATABASE_URI: URI koneksi database MySQL.
+   * JWT_COOKIE_HTTPONLY = True: Pengamanan token JWT di sisi client dengan menyimpannya di cookie HttpOnly.
+   * NUM_FRAMES = 10 dan FRAME_SIZE = (112, 112): Menentukan bahwa video yang diunggah akan diekstrak sebanyak 10 frame berukuran 112x112 piksel.
+   * HIGH_THRESHOLD = 60.0 & MEDIUM_THRESHOLD = 40.0: Ambang batas (threshold) penentuan tingkat trait kepribadian.
+
+2. Inisialisasi Awal:
+   * Ketika file app/wsgi.py dijalankan, fungsi create_app() dipanggil.
+   * Fungsi ini menginisialisasi database, migrasi database, CORS (mengizinkan komunikasi dari port React 5173), meregistrasi error handlers, dan memasang Blueprint rute.
+   * Model loading bersifat lazy (ditunda): Model PyTorch tidak langsung dimuat saat server Flask pertama kali menyala, melainkan baru dimuat ke memori GPU/CPU saat ada request prediksi pertama untuk menghemat resource sistem.
+
+
+========================================================================
+3. STRUKTUR & ARSITEKTUR MODEL
+========================================================================
+
+Model utama yang digunakan adalah kombinasi arsitektur Backbone Face Feature Extractor -> Temporal Sequence Learner (LSTM) -> Multi-output Regression Classifier (Dense):
+
+Alur Struktur Model:
+[Video Input: 10 Frames, 112x112]
+   │
+   ▼
+[Backbone: APolynet (apolynet_stodepth_deeper)]
+   │   --> Mengubah 10 frame menjadi 10 vektor fitur berukuran 256 dimensi
+   ▼
+[LSTM Layer 1 (hidden_size=128)]
+   │
+   ▼
+[LSTM Layer 2 (hidden_size=64)]
+   │   --> Mengambil output pada state temporal terakhir (1 x 64)
+   ▼
+[Dense Layer 1 (Linear: 64 -> 1024)]
+   │
+   ▼
+[Dense Layer 2 (Linear: 1024 -> 512, Aktivasi: ReLU)]
+   │
+   ▼
+[Dense Layer 3 (Linear: 512 -> 256, Aktivasi: ReLU)]
+   │
+   ▼
+[Output Layer (Linear: 256 -> 5, Aktivasi: Sigmoid)]
+   │
+   ▼
+[Skor 5 Traits OCEAN (0.0 - 1.0)]
+
+Penjelasan Komponen Model:
+1. APolynet (PolyFace Backbone): Backbone ekstraksi fitur wajah berbasis deep CNN yang didefinisikan dalam polyfacemodels2.py (apolynet_stodepth_deeper). Model ini melatih representasi wajah dan menghasilkan output embedding berdimensi 256.
+2. LSTM Layers:
+   * self.lstm1 = nn.LSTM(input_size=256, hidden_size=128, batch_first=True)
+   * self.lstm2 = nn.LSTM(input_size=128, hidden_size=64, batch_first=True)
+   Dua layer LSTM berurutan ini bertugas mempelajari hubungan temporal (perubahan ekspresi/gerakan wajah) dari sekuens 10 frame video.
+3. Classifier Dense:
+   * Bagian Fully Connected layer memetakan representasi temporal akhir (dimensi 64) menuju dimensi yang lebih besar (1024 -> 512 -> 256), lalu disalurkan ke layer output akhir dengan 5 neuron (sesuai dengan 5 dimensi OCEAN).
+   * Aktivasi sigmoid pada layer akhir membatasi skor kepribadian dalam rentang [0, 1], yang nantinya dikalikan dengan 100 untuk dijadikan persentase.
+
+
+========================================================================
+4. EKSTRAKSI FRAME DARI VIDEO
+========================================================================
+
+Ekstraksi frame dilakukan secara otomatis dalam route /predict pada file app/routes.py menggunakan fungsi extract_frames:
+
+1. Alur Pengambilan Frame:
+   * Membuka file video yang diunggah menggunakan cv2.VideoCapture(video_path).
+   * Mengambil total frame dari properti video (cv2.CAP_PROP_FRAME_COUNT).
+   * Menghitung indeks frame yang harus diambil. Sistem melakukan sampling secara merata menggunakan fungsi np.linspace(0, total_frames - 1, num_frames, dtype=int). Ini memastikan 10 frame yang diambil mewakili keseluruhan durasi video dari awal hingga akhir.
+   * Jika jumlah total frame pada video ternyata kurang dari 10, sistem akan melakukan perulangan indeks agar jumlah frame tetap genap 10.
+
+2. Preprocessing Frame:
+   * Mengatur posisi pembaca video ke indeks frame terpilih (cap.set(cv2.CAP_PROP_POS_FRAMES, idx)).
+   * Membaca frame tersebut. Jika pembacaan gagal, frame diganti dengan gambar hitam kosong.
+   * Mengubah skema warna OpenCV dari BGR ke RGB (cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).
+   * Melakukan resize ke resolusi target 112x112 piksel (cv2.resize).
+   * Mengembalikan array numpy berisi 10 frame dengan tipe data uint8.
+
+Catatan: Sistem memiliki file helper app/utils_extract.py yang menggunakan MTCNN untuk crop wajah. Namun, pada rute utama /predict saat ini, sistem langsung melakukan resize seluruh frame ke 112x112 tanpa face cropping.
+
+
+========================================================================
+5. PEMUATAN MODEL DAN BOBOT (MODEL WEIGHTS LOADING)
+========================================================================
+
+Pemuatan model dikelola oleh fungsi _get_model() di dalam app/services/predict.py:
+
+* Pengecekan Cache: Sistem memeriksa apakah instance model sudah terisi di dalam _model_cache. Jika ada, langsung dikembalikan (mencegah reload berulang).
+* Instansiasi Arsitektur: Memanggil apolynetmodel() yang menyusun arsitektur PyTorch PolyFaceOceanModel dan backbone APolynet (create_model_polyface3).
+* Pemuatan File Bobot: Menggunakan torch.load untuk memuat file .pth (default: polyface_backboned_final_adagrad.pth) ke target device (cuda jika tersedia GPU Nvidia, atau cpu).
+* Penerapan State Dict & Mode Evaluasi: Memasukkan bobot ke model lewat model.load_state_dict(state) dan mematikan fungsi dropout/batch norm training dengan memanggil model.eval().
+
+
+========================================================================
+6. FUNGSI PREDIKSI 5 TRAITS OCEAN
+========================================================================
+
+Logika prediksi dijalankan melalui fungsi predict_ocean(frames) di app/services/predict.py:
+
+1. Preprocessing Tambahan:
+   * Array frame dikonversi menjadi tipe data float dan dinormalisasi ke rentang [0.0, 1.0] dengan membaginya dengan 255.0.
+   * Memastikan dimensi tensor adalah 5 dimensi (Batch, Time_Steps, Channels, Height, Width).
+2. Forward Pass Model:
+   * Mengubah array numpy menjadi tensor PyTorch dan mengirimkannya ke device target GPU/CPU.
+   * Menghitung hasil prediksi di bawah blok with torch.no_grad(): untuk menghemat memori grafis dan mempercepat proses.
+   * Di dalam model, jika input dalam format channel-last (B, T, H, W, C), dilakukan permutasi ke channel-first (B, T, C, H, W).
+   * Data dibentuk ulang (reshape) dari (B, T, C, H, W) menjadi (B*T, C, H, W) agar setiap frame wajah dapat diproses satu per satu secara paralel oleh backbone APolynet.
+   * Backbone mengekstrak fitur wajah berdimensi 256. Fitur lalu di-reshape kembali menjadi sekuens temporal (B, T, 256).
+   * Sekuens ini diproses oleh LSTM ganda, lalu diakhiri oleh Multi-Layer Perceptrons (MLP) dengan aktivasi sigmoid.
+3. Pemetaan Output:
+   * Hasil keluaran model berupa array berdimensi 5 yang mewakili nilai probabilitas traits kepribadian.
+   * Skor dikonversi menjadi skala 0-100% dan dibulatkan hingga 2 desimal (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism).
+
+
+========================================================================
+7. PENGATURAN RUTE (ROUTING SETUP)
+========================================================================
+
+A. Rute Backend (Flask Blueprints)
+Rute didaftarkan pada app/__init__.py dan dipisah menjadi 3 blueprint:
+
+1. Rute Umum & Deteksi (routes.py - prefix /):
+   * POST /predict: Menerima upload video, memproses ekstraksi frame, memprediksi OCEAN, dan menyimpan hasil deteksi serta profil subjek ke database.
+   * GET /history: Mengambil riwayat pengujian OCEAN milik pengguna yang login.
+   * GET /history/<id>: Mengambil detail satu data deteksi tertentu.
+   * DELETE /history/<id>: Menghapus data deteksi tertentu.
+   * GET /history/<id>/insights: Mengambil narasi analisis kepribadian lengkap berdasarkan skor deteksi.
+   * GET /history/<id>/report & /report/preview: Menghasilkan berkas PDF hasil analisis kepribadian baik untuk diunduh langsung maupun dipratinjau (inline preview).
+2. Rute Autentikasi (auth.py - prefix /auth):
+   * POST /register: Mendaftarkan akun baru, mengenkripsi password dengan bcrypt, dan mengembalikan JWT cookie.
+   * POST /login: Memverifikasi email & password, mengembalikan token akses JWT yang dipasang di cookie HttpOnly.
+   * GET /me: Mengembalikan data profil pengguna saat ini.
+   * POST /logout: Menghapus cookie JWT dari browser.
+3. Rute Admin (admin.py - prefix /admin):
+   * Dilindungi decorator @admin_required.
+   * GET /users: Mengambil daftar seluruh pengguna terdaftar.
+   * PUT /users/<id>/role: Mengubah role pengguna lain (menjadi admin atau user biasa).
+   * DELETE /users/<id>: Menghapus akun pengguna beserta riwayat deteksinya.
+   * GET /detections: Mengambil semua data pengujian video dari seluruh pengguna di sistem.
+   * GET /statistics: Mengambil agregat statistik global.
+   * GET /statistics/timeline: Mengambil data tren harian deteksi.
+
+B. Rute Frontend (React - TanStack Router)
+Didefinisikan di ui/src/router.tsx:
+* GuestRoute: Hanya bisa diakses jika belum login (/login, /register).
+* ProtectedRoute: Hanya bisa diakses jika sudah login (halaman deteksi utama /).
+* AdminRoute: Hanya bisa diakses oleh akun admin (/admin).
+
+
+========================================================================
+8. ALUR KERJA ADMIN & MEKANISME CETAK LAPORAN PDF
+========================================================================
+
+A. Alur Kerja Admin (Admin Workflow)
+1. Proteksi Dekorator: Setiap request ke blueprint /admin diproteksi decorator @admin_required. Mengembalikan respon 403 Forbidden jika role bukan admin.
+2. Dashboard Monitoring: Admin dapat memantau aktivitas sistem melalui /admin/statistics dan /admin/statistics/timeline (tren deteksi, gender, usia, dan rata-rata skor kepribadian).
+3. Manajemen Data: Admin berhak mengubah hak akses user lain atau menghapus database deteksi yang tidak diperlukan.
+
+B. Mekanisme Cetak Laporan (PDF Generation)
+Ketika user atau admin memanggil endpoint /history/<id>/report, backend merender file PDF secara dinamis in-memory:
+
+1. Request diterima oleh rute GET /history/<id>/report di app/routes.py.
+2. Mengambil data deteksi dari database MySQL.
+3. Memanggil generate_pdf_report(...) di app/pdf_generator.py.
+4. Membuat dokumen menggunakan modul SimpleDocTemplate dari ReportLab (ukuran A4).
+5. Menyusun elemen dokumen:
+   - Header: Judul Laporan.
+   - Tabel Informasi Profil Subjek.
+   - Kotak Ringkasan Kepribadian (berlatar belakang warna biru muda).
+   - Tabel Skor & Level OCEAN.
+   - Detail Analisis per dimensi, lengkap dengan progress bar (Visualisasi horizontal digambar menggunakan custom Table ReportLab dengan dua kolom terisi/kosong).
+   - Saran pengembangan dan disclaimer footer.
+6. Hasil render dikembalikan dalam bentuk binary buffer (io.BytesIO()) dan dikirim langsung ke browser dengan header Content-Disposition: attachment; filename=report_name.pdf.

@@ -1,0 +1,11 @@
+#step 1 terminal vscode 1
+source .venv/bin/activate
+cd app
+python wsgi.py
+
+#step 2 new terminal vscode 2
+cd ui
+bun run dev --host
+
+#step 3 terminal zsh ghosty
+bore local 5173 --to bore.pub --port 5173
