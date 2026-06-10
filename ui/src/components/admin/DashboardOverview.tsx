@@ -150,7 +150,7 @@ function ScoreDistributionCard({ distribution }: ScoreDistributionCardProps) {
             const config = TRAIT_CONFIG[key];
             const traitDist = distribution[key as keyof typeof distribution];
             const total =
-              traitDist.high + traitDist.medium + traitDist.low || 1;
+              traitDist.high + traitDist.low || 1;
 
             return (
               <div key={key} className="space-y-1">
@@ -160,9 +160,6 @@ function ScoreDistributionCard({ distribution }: ScoreDistributionCardProps) {
                   </span>
                   <div className="flex gap-2 text-xs">
                     <span className="text-green-600">H: {traitDist.high}</span>
-                    <span className="text-yellow-600">
-                      M: {traitDist.medium}
-                    </span>
                     <span className="text-red-600">L: {traitDist.low}</span>
                   </div>
                 </div>
@@ -170,10 +167,6 @@ function ScoreDistributionCard({ distribution }: ScoreDistributionCardProps) {
                   <div
                     className="bg-green-500 transition-all"
                     style={{ width: `${(traitDist.high / total) * 100}%` }}
-                  />
-                  <div
-                    className="bg-yellow-500 transition-all"
-                    style={{ width: `${(traitDist.medium / total) * 100}%` }}
                   />
                   <div
                     className="bg-red-500 transition-all"
@@ -187,15 +180,11 @@ function ScoreDistributionCard({ distribution }: ScoreDistributionCardProps) {
         <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-500">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-500 rounded" />
-            <span>High (≥60%)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-yellow-500 rounded" />
-            <span>Medium (40-59%)</span>
+            <span>High (≥50%)</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-red-500 rounded" />
-            <span>Low (&lt;40%)</span>
+            <span>Low (&lt;49.99%)</span>
           </div>
         </div>
       </CardContent>
