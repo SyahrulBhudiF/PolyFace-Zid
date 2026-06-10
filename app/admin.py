@@ -324,21 +324,19 @@ def get_statistics():
         }
 
     score_distribution = {
-        "openness": {"high": 0, "medium": 0, "low": 0},
-        "conscientiousness": {"high": 0, "medium": 0, "low": 0},
-        "extraversion": {"high": 0, "medium": 0, "low": 0},
-        "agreeableness": {"high": 0, "medium": 0, "low": 0},
-        "neuroticism": {"high": 0, "medium": 0, "low": 0},
+        "openness": {"high": 0, "low": 0},
+        "conscientiousness": {"high": 0, "low": 0},
+        "extraversion": {"high": 0, "low": 0},
+        "agreeableness": {"high": 0, "low": 0},
+        "neuroticism": {"high": 0, "low": 0},
     }
 
     detections = Detection.query.all()
     for det in detections:
         for trait in ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]:
             score = getattr(det, trait)
-            if score >= 60:
+            if score >= 50:
                 score_distribution[trait]["high"] += 1
-            elif score >= 40:
-                score_distribution[trait]["medium"] += 1
             else:
                 score_distribution[trait]["low"] += 1
 

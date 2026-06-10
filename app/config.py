@@ -42,8 +42,7 @@ class Config:
     STATIC_FOLDER: str = os.path.join(BASE_DIR, "..", "static")
 
     # OCEAN thresholds
-    HIGH_THRESHOLD: float = 60.0
-    MEDIUM_THRESHOLD: float = 40.0
+    HIGH_THRESHOLD: float = 50.0
 
     # Frame extraction
     NUM_FRAMES: int = 10

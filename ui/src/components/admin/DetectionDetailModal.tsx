@@ -46,18 +46,15 @@ function formatDate(dateString: string) {
   });
 }
 
-function getScoreLevel(score: number): "high" | "medium" | "low" {
-  if (score >= 60) return "high";
-  if (score >= 40) return "medium";
+function getScoreLevel(score: number): "high" | "low" {
+  if (score >= 50) return "high";
   return "low";
 }
 
-function getLevelColor(level: "high" | "medium" | "low") {
+function getLevelColor(level: "high" | "low") {
   switch (level) {
     case "high":
       return "bg-green-100 text-green-700 border-green-200";
-    case "medium":
-      return "bg-yellow-100 text-yellow-700 border-yellow-200";
     case "low":
       return "bg-red-100 text-red-700 border-red-200";
   }

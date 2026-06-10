@@ -3,8 +3,7 @@ OCEAN Personality Insight Generator
 
 Template narasi insight untuk tiap dimensi OCEAN berdasarkan skor prediksi.
 Threshold:
-- High: >= 60%
-- Medium: 40% - 59%
+- High: >= 50%
 - Low: < 40%
 """
 
@@ -12,7 +11,7 @@ from typing import TypedDict
 
 
 class InsightResult(TypedDict):
-    level: str  # "high", "medium", "low"
+    level: str  # "high", "low"
     title: str
     description: str
     characteristics: list[str]
@@ -29,16 +28,13 @@ class OceanInsights(TypedDict):
 
 
 # Threshold definitions
-HIGH_THRESHOLD = 60
-MEDIUM_THRESHOLD = 40
+HIGH_THRESHOLD = 50
 
 
 def get_level(score: float) -> str:
     """Determine the level based on score threshold."""
     if score >= HIGH_THRESHOLD:
         return "high"
-    elif score >= MEDIUM_THRESHOLD:
-        return "medium"
     else:
         return "low"
 
@@ -63,22 +59,6 @@ OPENNESS_INSIGHTS = {
             "Coba pengalaman baru secara berkala",
             "Bergabung dengan komunitas yang mendorong inovasi",
             "Baca buku dari berbagai genre",
-        ],
-    ),
-    "medium": InsightResult(
-        level="medium",
-        title="Moderately Open to Experience",
-        description="Anda memiliki keseimbangan antara keterbukaan dan tradisi. Anda bisa menerima ide baru namun tetap menghargai pendekatan konvensional.",
-        characteristics=[
-            "Fleksibel dalam menerima ide baru",
-            "Menghargai tradisi namun terbuka pada perubahan",
-            "Praktis namun bisa kreatif saat diperlukan",
-            "Seimbang antara inovasi dan stabilitas",
-        ],
-        suggestions=[
-            "Cobalah sesekali keluar dari zona nyaman",
-            "Eksplorasi minat baru secara bertahap",
-            "Pertimbangkan sudut pandang berbeda dalam diskusi",
         ],
     ),
     "low": InsightResult(
@@ -120,22 +100,6 @@ CONSCIENTIOUSNESS_INSIGHTS = {
             "Beri ruang untuk fleksibilitas",
             "Delegasikan tugas jika memungkinkan",
             "Hindari perfeksionisme berlebihan",
-        ],
-    ),
-    "medium": InsightResult(
-        level="medium",
-        title="Moderately Conscientious",
-        description="Anda memiliki keseimbangan antara struktur dan fleksibilitas. Anda bisa terorganisir namun juga adaptif.",
-        characteristics=[
-            "Cukup terorganisir",
-            "Fleksibel dalam pendekatan",
-            "Dapat fokus saat diperlukan",
-            "Seimbang antara perencanaan dan spontanitas",
-        ],
-        suggestions=[
-            "Tingkatkan perencanaan untuk proyek penting",
-            "Gunakan tools organisasi sederhana",
-            "Tetapkan deadline yang realistis",
         ],
     ),
     "low": InsightResult(
@@ -180,22 +144,6 @@ EXTRAVERSION_INSIGHTS = {
             "Hargai kebutuhan introversi orang lain",
         ],
     ),
-    "medium": InsightResult(
-        level="medium",
-        title="Ambivert",
-        description="Anda memiliki keseimbangan antara sifat ekstrovert dan introvert. Anda bisa menikmati interaksi sosial namun juga membutuhkan waktu sendiri.",
-        characteristics=[
-            "Fleksibel dalam situasi sosial",
-            "Dapat bersosialisasi namun perlu recharge",
-            "Adaptif terhadap berbagai situasi",
-            "Seimbang antara berbicara dan mendengar",
-        ],
-        suggestions=[
-            "Kenali kapan Anda butuh bersosialisasi vs waktu sendiri",
-            "Manfaatkan kedua sisi untuk berbagai situasi",
-            "Jangan paksa diri untuk selalu on/off",
-        ],
-    ),
     "low": InsightResult(
         level="low",
         title="Introverted",
@@ -236,22 +184,6 @@ AGREEABLENESS_INSIGHTS = {
             "Belajar mengatakan tidak bila perlu",
             "Pastikan kebutuhan diri juga terpenuhi",
             "Waspada terhadap manipulasi",
-        ],
-    ),
-    "medium": InsightResult(
-        level="medium",
-        title="Balanced Cooperativeness",
-        description="Anda memiliki keseimbangan antara kooperatif dan asertif. Anda bisa bekerja sama namun juga bisa memperjuangkan kepentingan sendiri.",
-        characteristics=[
-            "Kooperatif namun asertif",
-            "Bisa percaya namun tetap waspada",
-            "Fleksibel dalam negosiasi",
-            "Seimbang antara memberi dan menerima",
-        ],
-        suggestions=[
-            "Terus kembangkan empati",
-            "Pertahankan keseimbangan yang ada",
-            "Gunakan diplomasi dalam konflik",
         ],
     ),
     "low": InsightResult(
@@ -295,22 +227,6 @@ NEUROTICISM_INSIGHTS = {
             "Pertimbangkan journaling untuk emosi",
             "Jaga kesehatan fisik (tidur, olahraga)",
             "Cari bantuan profesional jika diperlukan",
-        ],
-    ),
-    "medium": InsightResult(
-        level="medium",
-        title="Emotionally Balanced",
-        description="Anda memiliki stabilitas emosional yang cukup. Anda bisa mengalami stres namun umumnya dapat mengatasinya.",
-        characteristics=[
-            "Cukup stabil secara emosional",
-            "Dapat mengatasi stres umum",
-            "Kadang cemas tapi bisa recover",
-            "Seimbang dalam reaksi emosional",
-        ],
-        suggestions=[
-            "Pertahankan kebiasaan sehat yang ada",
-            "Kembangkan coping strategies",
-            "Kenali trigger stres pribadi",
         ],
     ),
     "low": InsightResult(
